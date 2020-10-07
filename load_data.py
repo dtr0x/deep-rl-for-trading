@@ -8,6 +8,8 @@ if __name__ == '__main__':
     with open('raw.pkl', 'rb') as f:
         data = pickle.load(f)
 
+    data.to_csv('contracts.csv')
+
     # get commodities data as numpy array
-    cols = [c for c in data.columns if 'Comdty' in c]
-    comms = data[cols].values.transpose()
+    # cols = [c for c in data.columns if 'Comdty' in c]
+    # comms = data[cols].values.transpose()
