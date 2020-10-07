@@ -1,8 +1,11 @@
 import pickle
 import numpy as np
+import torch
+
+# load time series data and save as tensors
 
 if __name__ == '__main__':
-    with open('df.pkl', 'rb') as f:
+    with open('raw.pkl', 'rb') as f:
         data = pickle.load(f)
 
     # get commodities data as numpy array
