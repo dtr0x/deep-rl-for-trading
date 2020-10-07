@@ -1,27 +1,44 @@
+# -*- coding: utf-8 -*-
 import torch
 import numpy as np
 import pandas as pd
+
+#SP500       = pd.read_csv('/content/SP500 dec2004-dec2018.csv')
+StathisData = pd.read_csv('/content/Final Stathis Data (3).csv')
+
+#SP_prices = SP500.loc[:,'Close']
+#SPprices = torch.tensor(SP_prices)
+
+
+
+data = torch.tensor(StathisData['HG1.Comdty'])
+#data = SPprices
+#data = SP_prices
+#t    = 312
 
 # convert 1D dataframe to tensor (avoid inporting tensorflow)
 def df2tensor(df):
     return torch.tensor(np.array(df))
 
+### FUNCTION ONE ###
+# NORMALIZED PRICES
 # normalize data (tensor)
 def normalize_prices(data):
-    mu = torch.mean(data)
+    mu    = torch.mean(data)
     sigma = torch.std(data)
     return (data-mu)/sigma
 
+### FUNCTION TWO ###
+# NORMALIZED RETURNS
 # normalized returns from price data up to time t
 def normalize_returns(data, t):
-    
+
     return1Month = (data[t]-data[t-30])/data[t-30]
     return2Month = (data[t]-data[t-60])/data[t-60]
     return3Month = (data[t]-data[t-90])/data[t-90]
-    return1Year    = (data[t]-data[t-252])/data[t-252]
+    return1Year  = (data[t]-data[t-252])/data[t-252]
 
     totalReturn = (data[1:(t+1)]-data[0:t])/data[0:t]
-
     df = pd.DataFrame(totalReturn)
 
     # the first value of each tensor is nan here. Verify how df.ewn works
@@ -46,6 +63,12 @@ def normalize_returns(data, t):
 
     return df2tensor(normalReturns)
 
+
+
+
+
+### FUNCTION THREE ###
+# MACD
 def MACD(data,t):
 
     df = pd.DataFrame(data[:(t+1)])
@@ -65,19 +88,20 @@ def MACD(data,t):
     StdRoll252daystest = [0]*3
     macdVec = [0]*3
     for i in range(3):
-        q[i] = (maShort[i] - maLong[i])/StdRoll63days
-        StdRoll252daystest[i] = df2tensor(q[i].rolling(252).std())[-1]
-        macdVec[i] = df2tensor(q[i])[-1]/StdRoll252daystest[i]
+      q[i] = (maShort[i] - maLong[i])/StdRoll63days
+      StdRoll252daystest[i] = df2tensor(q[i].rolling(252).std())[-1]
+      macdVec[i] = df2tensor(q[i])[-1]/StdRoll252daystest[i]
 
     return df2tensor(macdVec).mean()
-    
-    
 
+### FUNCTION FOUR ###
+# RSI INDICATOR
 def RSI (data,t):
 
     # 0:t+1 because index returns back [0:t+1) not inclusive!
-    df    = pd.DataFrame(data[0:(t+1)])
-    diff  = df.diff(1).dropna()
+    data1 = data[0:(t+1)]
+    df    = pd.DataFrame(data1)
+    diff  = df.diff(1).dropna()        # diff in one field(one day)
 
     #this preservers dimensions off diff values
     up_chg = 0 * diff
@@ -97,10 +121,12 @@ def RSI (data,t):
 
     rs = abs(up_chg_avg/down_chg_avg)
     rsi = 100 - 100/(1+rs)
+    #RSI = df2tensor(rsi[t-1,0])
+    #RSIval = RSI[t-1,0]
 
     return df2tensor(rsi)[-1]
 
-# Function that returns state space for one asset at time t i.e. a vector of size 7
+# Function to retrieve a list of size at time t
 def state_space1 (data,t):
 
     normalized_price  = normalize_prices(data)[t]
@@ -123,8 +149,7 @@ def state_space1 (data,t):
 
     return df2tensor(state_space)
 
-
-# Function that returns state space for one asset at time t to t-60 i.e. dimension 7*60
+# LOOPING THROUGH DATA TO RETRIEVE A 7x60 STATE SPACE FROM TIME 't' TO 't-59'
 def state_space2 (data,t):
 
     state_space_info = [[]]*60
@@ -136,9 +161,11 @@ def state_space2 (data,t):
     state_space      = [list(x) for x in state_space_info.transpose()]
 
     return df2tensor(state_space)
-    
-    
-# Function that returns state space for one asset at time t to t-60 for days t i.e. dimension t*7*60
+
+
+
+# LOOPING THROUGH DATA TO RETRIEVE A 7x60 STATE SPACE FROM TIME 't' TO 't-59'
+# for all columuns i.e. returning state space dimension n*7*60 for day t
 def state_space3 (data):
 
     t = 312
@@ -151,11 +178,17 @@ def state_space3 (data):
       state_space_tvec[j, :, :] = state_space2(data,t)
 
     return state_space_tvec
-    
-    
-# Function that returns state space by asset dimension n*7*60*t for all days t i.e. dimension nbr specific assets * t * 7 * 60
-# asset is a character: asset_type = "Comdty", "Curncy" or "Index"
+
+# returning state space by asset dimension n*7*60*t FOR ALL DAYS t
+# asset is a character: comodity, currency or index
 def state_space4 (data,asset_type):
+
+    if asset_type == "comodity":
+      asset = "Comdty"
+    elif asset_type == "currency":
+      asset = "Curncy"
+    else:
+      asset = "Index"
 
     data = data.loc[:,data.columns.str.endswith(asset_type)]
     nbr_assets = data.shape[1]
@@ -167,13 +200,12 @@ def state_space4 (data,asset_type):
     state_space_n_t = torch.zeros(size=(nbr_assets, t_days, 7, 60))
 
     for i in range(nbr_assets):
-        df = torch.tensor(data[i])
-        state_space_n_t[i,:, :, :] = state_space3(df)
+      df = torch.tensor(data[i])
+      state_space_n_t[i,:, :, :] = state_space3(df)
 
-return state_space_n_t
+    return state_space_n_t
 
-
-# Function that returns state space by asset dimension n*7*60*t for all days t i.e. dimension nbr. Total assets * t * 7 * 60
+# returning state space for all assets dimension n*7*60*t FOR ALL DAYS t
 def state_space5 (data):
 
     nbr_assets = data.shape[1]
@@ -189,35 +221,3 @@ def state_space5 (data):
       state_space_n_t[i,:, :, :] = state_space3(df)
 
     return state_space_n_t
-
-
-
-
-
-
-if __name__ == '__main__':
-    # load data
-    SP500 = pd.read_csv('SP500 dec2004-dec2018.csv')
-
-    # get normalized closing prices
-    close_prices = torch.tensor(SP500['Close'])
-    norm_prices = normalize(close_prices)
-
-    # print with default formatting
-    print("Normalized close prices: {}".format(norm_prices))
-    print("Number of days: {}".format(norm_prices.size()[0]))
-
-    t = 252
-    norm_returns = normalize_returns(close_prices, t)
-    print("Normalized returns at time t={}: {}".format(t, norm_returns))
-
-    tensor_list = [torch.tensor(-0.7582, dtype=torch.float64),
-                 torch.tensor(-0.7849, dtype=torch.float64),
-                 torch.tensor(-0.7931, dtype=torch.float64),
-                 torch.tensor(-0.7852, dtype=torch.float64)]
-    l2t = torch.tensor(tensor_list)
-    print("Test list to tensor: {}".format(l2t))
-
-    macd = MACD(close_prices, t)
-    # {:.3f} is a placeholder to convert a float to 3 decimal places
-    print("MACD: {:.3f}".format(macd))
