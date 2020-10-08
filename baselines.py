@@ -2,17 +2,6 @@ import torch
 import numpy as np
 import pandas as pd
 
-SP500       = pd.read_csv('/Users/martha/Desktop/STATHIS PROJECT/DATA/SP500 dec2004-dec2018.csv')
-StathisData = pd.read_csv('/Users/martha/Desktop/STATHIS PROJECT/DATA/Final Stathis Data (3).csv')
-
-#data = torch.tensor(StathisData['FV1.Comdty'])
-data = torch.tensor(StathisData['HG1.Comdty'])
-t    = 388
-
-#SP_prices = SP500.loc[:,'Close']
-#SPprices = torch.tensor(SP_prices)
-#data = SPprices
-#t    = 312
 
 # convert 1D dataframe to tensor (avoid inporting tensorflow)
 def df2tensor(df):
@@ -117,7 +106,7 @@ def MACD_reward(data,t):
 
     return reward
 
-MACD_reward(data,t)
+#MACD_reward(data,t)
 
 def long_only_reward(data,t):
 
@@ -158,7 +147,7 @@ def long_only_reward(data,t):
 
     return reward
 
-long_only_reward(data,t)
+#long_only_reward(data,t)
 
 
 
@@ -232,122 +221,3 @@ def Sgn_reward(data,t):
     reward = reward1 - bp*p*abs(reward2)
 
     return reward
-
-
-
-StathisData = pd.read_csv('/content/Final Stathis Data.csv')
-
-StathisData
-
-df = StathisData.loc[:,StathisData.columns.str.endswith("Index")]
-#df = df.loc[:,df.columns.str.endswith("Comdty")]
-#df = df.loc[:,df.columns.str.endswith("Curncy")]
-nbr_assets = df.shape[1]
-df.columns = range(0,nbr_assets)
-N = df.shape[1]
-
-#df = StathisData.loc[:,StathisData.columns.str.endswith("Index")]
-df = StathisData.loc[:,StathisData.columns.str.endswith("Comdty")]
-#df = StathisData.loc[:,StathisData.columns.str.endswith("Curncy")]
-nbr_assets = df.shape[1]
-df.columns = range(0,nbr_assets)
-
-
-
-#t = 1450
-t = 388
-#t=3405
-#T = 3647
-T = t+252
-#t = 313
-#T = 513
-TT = len(range(t,T+1))
-N = df.shape[1]
-MACD_reward_vect = [0]*TT
-MACD_std_vect = [0]*TT
-for tt in range(t,T+1):
-  MACD_reward_vec  = [0]*N
-  for i in range(2,N):
-    df1 = df2tensor(df[i][0:(tt+1)])
-    MACD_reward_vec[i-2] = MACD_reward(df1,tt)
-  MACD_reward_vect[tt-t] = df2tensor(MACD_reward_vec).mean()
-  MACD_std_vect[tt-t]    = df2tensor(MACD_reward_vec).std()
-
-t = 1450
-#t=3405
-T = 3647
-#T = t+252
-#t = 313
-#T = 513
-TT = len(range(t,T+1))
-N = df.shape[1]
-long_only_std_vect = [0]*TT
-long_only_reward_vect = [0]*TT
-for tt in range(t,T+1):
-  long_only_reward_vec  = [0]*N
-  for i in range(2,N):
-    df1 = df2tensor(df[i][0:(tt+1)])
-    long_only_reward_vec[i-2] = long_only_reward(df1,tt)
-  long_only_reward_vect[tt-t] = df2tensor(long_only_reward_vec).mean()
-  long_only_std_vect[tt-t]    = df2tensor(long_only_reward_vec).std()
-
-
-
-test1 = df2tensor(MACD_reward_vect)
-test1
-test2 = np.array(test1)
-test3 = np.where(test2<0)
-
-test4 = test2[test3]
-test4.std()
-
-
-
-
-
-df = StathisData
-#df = df.loc[:,df.columns.str.endswith("Index")]
-#df = df.loc[:,df.columns.str.endswith("Comdty")]
-#df = df.loc[:,df.columns.str.endswith("Curncy")]
-nbr_assets = df.shape[1]
-df.columns = range(0,nbr_assets)
-N = df.shape[1]
-
-
-
-df2tensor(MACD_reward_vect).mean()*np.sqrt(252)
-
-df2tensor(long_only_reward_vect).mean()
-
-df2tensor(MACD_reward_vect).std()*np.sqrt(252)
-
-df2tensor(MACD_std_vect).mean()*np.sqrt(252)
-
-df2tensor(long_only_reward_vect).std()*np.sqrt(252)
-
-
-
-
-
-df = StathisData
-df = df.loc[:,df.columns.str.endswith("Curncy")]
-nbr_assets = df.shape[1]
-df.columns = range(0,nbr_assets)
-
-df
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-df

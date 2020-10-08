@@ -28,10 +28,18 @@ if __name__ == '__main__':
     # reset first date
     data = data[data['date'] >= init_date]
 
-    # TODO: add forward fill code
-    # ...
-    # ...
-    # ...
+    # forward filling all NA values
+    data = data.reset_index(drop=True)
+    n = data.shape[0]
+    k = data.shape[1]-1
+    colnames = data.columns[1:]
+    for tt in range(0,k):
+        data_vec = data[colnames[tt]]
+        data_vec = data_vec.reset_index(drop=True)
+        data_vec_na = data_vec.isna()
+        for i in range(1,n):
+            if data_vec_na[i] == True:
+                data[colnames[tt]][i] = data[colnames[tt]][i-1]
 
-    # uncomment once forward fill complete
-    #data.to_csv('cleaned_data.csv', index=False)
+    # saving data to csv
+    data.to_csv('cleaned_data.csv', index=False)
