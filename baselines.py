@@ -69,117 +69,77 @@ def MACD_signal(data,t):
 
 def MACD_reward(data,t):
 
-    action_vec = df2tensor([MACD_signal(data,t-1),MACD_signal(data,t-2)])
+    action_vec = df2tensor([MACD_signal(data,t),MACD_signal(data,t-1)])
 
-    r_vec = data[1:(t+1)] - data[0:t]
+    #r_vec = data[1:(t+1)] - data[0:t]
     #r_vec = (data[1:(t+1)] - data[0:t])/data[0:t]
+    r_vec = data[(t-251):(t+1)]-data[(t-252):t]
     r_df  = pd.DataFrame(r_vec)
     ex_ante_sigma = df2tensor(r_df.ewm(span=60).std())
 
-    sigma_vec = df2tensor([ex_ante_sigma[-2],ex_ante_sigma[-3]])
+    sigma_vec = df2tensor([ex_ante_sigma[-1],ex_ante_sigma[-2]])
 
-    r = r_vec[-1]
+    #r = r_vec[-1]
+    r = data[t+1] - data[t]
     p = data[t]
 
-    #tgt_volatility = ex_ante_sigma[1,-1].mean()
-    #tgt_volatility = ex_ante_sigma[1,-1].median()
-    #tgt_volatility = 0.15
-    #tgt_volatility = 0.30
     tgt_volatility = 0.10
-    #tgt_volatility = (15+40)/2
-
-    #bp = 0.0001
-    bp = 0.0025
-    #bp = 0.001
-    #bp = 0.01
-    #bp = 0.1
-    #bp = 1
+    bp = 0.0000025
 
     reward1 = action_vec[0]*r*tgt_volatility/sigma_vec[0]
-
-    #if action_vec[0]==action_vec[1]:
-    #  reward2 = 0
-    #else:
     reward2 = action_vec[0]*tgt_volatility/sigma_vec[0] - action_vec[1]*tgt_volatility/sigma_vec[1]
-
-    reward = reward1 - bp*p*abs(reward2)
+    reward  = reward1 - bp*p*abs(reward2)
 
     return reward
 
-#MACD_reward(data,t)
+
 
 def long_only_reward(data,t):
 
     action_vec = df2tensor([1,1])
-    r_vec = data[1:(t+1)] - data[0:t]
+    #r_vec = data[1:(t+1)] - data[0:t]
     #r_vec = (data[1:(t+1)] - data[0:t])/data[0:t]
+    r_vec = data[(t-251):(t+1)]-data[(t-252):t]
     r_df  = pd.DataFrame(r_vec)
     ex_ante_sigma = df2tensor(r_df.ewm(span=60).std())
 
-    sigma_vec = df2tensor([ex_ante_sigma[-2],ex_ante_sigma[-3]])
+    sigma_vec = df2tensor([ex_ante_sigma[-1],ex_ante_sigma[-2]])
 
-    r = r_vec[-1]
+    #r = r_vec[-1]
+    r = data[t+1] - data[t]
     p = data[t]
 
-    #tgt_volatility = ex_ante_sigma[1,-1].mean()
-    #tgt_volatility = ex_ante_sigma[1,-1].median()
-    #tgt_volatility = 0.15
-    #tgt_volatility = 0.30
     tgt_volatility = 0.10
-    #tgt_volatility = (15+40)/2
-
-    #bp = 0.0001
-    bp = 0.0025
-    #bp = 0.001
-    #bp = 0.01
-    #bp = 0.1
-    #bp = 1
+    bp = 0.0000025
 
     reward1 = action_vec[0]*r*tgt_volatility/sigma_vec[0]
-
-    #if action_vec[0]==action_vec[1]:
-    #  reward2 = 0
-    #else:
-
     reward2 = action_vec[0]*tgt_volatility/sigma_vec[0] - action_vec[1]*tgt_volatility/sigma_vec[1]
-
-    reward = reward1 - bp*p*abs(reward2)
+    reward  = reward1 - bp*p*abs(reward2)
 
     return reward
-
-#long_only_reward(data,t)
-
-
 
 
 
 def Sgn_reward(data,t):
 
-    #data1 = pd.DataFrame(data)
-
-
-    #df1 = df2tensor((data1[(t-251):(t+1)]-data1[(t-252):t])/data1[(t-252):t])
-    #df2 = df2tensor((data1[(t-252):t]-data1[(t-253):(t-1)])/data1[(t-253):(t-1)])
-
-
-    df1 = data[(t-251):(t+1)]-data[(t-252):t]
-    df2 = data[(t-252):t]-data[(t-253):(t-1)]
-
-    #data  = pd.DataFrame(data)
+    # Good
+    #df1 = (data[(t-251):(t+1)]-data[(t-252):t])//data[(t-252):t]
+    #df2 = (data[(t-252):t]-data[(t-253):(t-1)])//data[(t-253):(t-1)]
 
     #expected_trend1 = (data[t]-data[t-252])/data[t-252]
-    #expected_trend2 = (data[t-1] - data[t-253])/data[t-253]
+    #expected_trend2 = (data[t-1]-data[t-253])/data[t-253]
 
-    #expected_trend1 = (data[t]-data[t-252])/data[t-252]
-    #expected_trend2 = data[t-1] - data[t-253]
+    expected_trend1 = torch.true_divide(data[t]-data[t-252],data[t-252])
+    expected_trend2 = torch.true_divide(data[t-1]-data[t-253],data[t-253])
 
-    #taking a maximum long position when the expected trend is positive
-    #action_vec = [1]*2
-    #if expected_trend1<0:
-    #  action_vec = [-1]*2
+    #df1 = torch.div(data[(t-251):(t+1)]-data[(t-252):t],data[(t-252):t])
+    #df2 = torch.div(data[(t-252):t]-data[(t-253):(t-1)],data[(t-253):(t-1)])
+    #df1 = data[1:t] - data[0:(t-1)]
+    #df2 = data[1:(t+1)] - data[0:t]
 
-    expected_trend1 = df1.mean()
-    expected_trend2 = df2.mean()
+    # Good
+    #expected_trend1 = df1.float().mean()
+    #expected_trend2 = df2.float().mean()
 
     #taking a maximum long position when the expected trend is positive
     action_vec = [1]*2
@@ -188,36 +148,21 @@ def Sgn_reward(data,t):
     if expected_trend2<0:
        action_vec[1] = -1
 
-    r_vec = data[1:(t+1)] - data[0:t]
-    #r_vec = (data[1:(t+1)] - data[0:t])/data[0:t]
+    r_vec = data[(t-251):(t+1)]-data[(t-252):t]
+    #r_vec = data[1:(t+1)] - data[0:t]
     r_df  = pd.DataFrame(r_vec)
     ex_ante_sigma = df2tensor(r_df.ewm(span=60).std())
 
-    sigma_vec = df2tensor([ex_ante_sigma[-2],ex_ante_sigma[-3]])
+    sigma_vec = df2tensor([ex_ante_sigma[-1],ex_ante_sigma[-2]])
 
-    r = r_vec[-1]
+    r = data[t+1] - data[t]
     p = data[t]
 
-    #tgt_volatility = ex_ante_sigma[1,-1].mean()
-    #tgt_volatility = ex_ante_sigma[1,-1].median()
-    #tgt_volatility = 0.15
-    tgt_volatility = 0.3
-    #tgt_volatility = (15+40)/2
-
-    #bp = 0.0001
-    bp = 0.0025
-    #bp = 0.01
-    #bp = 0.1
-    #bp = 1
+    tgt_volatility = 0.10
+    bp = 0.0000025
 
     reward1 = action_vec[0]*r*tgt_volatility/sigma_vec[0]
-
-    #if action_vec[0]==action_vec[1]:
-    #  reward2 = 0
-    #else:
-
     reward2 = action_vec[0]*tgt_volatility/sigma_vec[0] - action_vec[1]*tgt_volatility/sigma_vec[1]
-
-    reward = reward1 - bp*p*abs(reward2)
+    reward  = reward1 - bp*p*abs(reward2)
 
     return reward
