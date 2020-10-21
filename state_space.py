@@ -1,22 +1,8 @@
-# -*- coding: utf-8 -*-
 import torch
 import numpy as np
 import pandas as pd
 
-#SP500       = pd.read_csv('/content/SP500 dec2004-dec2018.csv')
-StathisData = pd.read_csv('/content/Final Stathis Data (3).csv')
-
-#SP_prices = SP500.loc[:,'Close']
-#SPprices = torch.tensor(SP_prices)
-
-
-
-data = torch.tensor(StathisData['HG1.Comdty'])
-#data = SPprices
-#data = SP_prices
-#t    = 312
-
-# convert 1D dataframe to tensor (avoid inporting tensorflow)
+# convert 1D dataframe to tensor
 def df2tensor(df):
     return torch.tensor(np.array(df))
 
@@ -32,7 +18,6 @@ def normalize_prices(data):
 # NORMALIZED RETURNS
 # normalized returns from price data up to time t
 def normalize_returns(data, t):
-
     return1Month = (data[t]-data[t-30])/data[t-30]
     return2Month = (data[t]-data[t-60])/data[t-60]
     return3Month = (data[t]-data[t-90])/data[t-90]
@@ -62,10 +47,6 @@ def normalize_returns(data, t):
     normalReturns = [finalReturn1Month,finalReturn2Month,finalReturn3Month,finalReturn1Year]
 
     return df2tensor(normalReturns)
-
-
-
-
 
 ### FUNCTION THREE ###
 # MACD
@@ -163,7 +144,6 @@ def state_space2 (data,t):
     return df2tensor(state_space)
 
 
-
 # LOOPING THROUGH DATA TO RETRIEVE A 7x60 STATE SPACE FROM TIME 't' TO 't-59'
 # for all columuns i.e. returning state space dimension n*7*60 for day t
 def state_space3 (data):
@@ -206,18 +186,15 @@ def state_space4 (data,asset_type):
     return state_space_n_t
 
 # returning state space for all assets dimension n*7*60*t FOR ALL DAYS t
-def state_space5 (data):
-
+def state_space(data):
     nbr_assets = data.shape[1]
-    data.columns = range(0,nbr_assets)
 
-    t = 312
-    T = list(data.shape)[0]-1
-    t_days = len(range(t,T))
+    t = 312 # min t value where we can compute a state
+    t_days = len(data[t:])
     state_space_n_t = torch.zeros(size=(nbr_assets, t_days, 7, 60))
 
-    for i in range(nbr_assets):
-      df = torch.tensor(data[i])
-      state_space_n_t[i,:, :, :] = state_space3(df)
+    for col in data.columns:
+      x = df2tensor(data[col])
+      state_space_n_t[i,:, :, :] = state_space3(x)
 
     return state_space_n_t
