@@ -2,7 +2,7 @@ from util import *
 from state_space import state_space
 from policy_net import PolicyNet
 from replay_memory import ReplayMemory
-from reinforcement import *
+from reinforcement import get_reward
 import random
 
 # Parameters
@@ -83,7 +83,7 @@ if __name__ == '__main__':
 
             # TODO: implement get_reward function
             next_prices = price_data[t+1, :]
-            rewards = get_reward(next_prices, actions, actions_prev)
+            rewards = get_reward(price_data, t, actions, actions_prev)
             rewards = torch.tensor([rewards], device=device)
 
             next_states = states[:, t+1, :, :]

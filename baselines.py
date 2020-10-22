@@ -3,6 +3,7 @@ from util import *
 # Functions for baseline algorithms
 
 def MACD(data,t):
+
     df = pd.DataFrame(data[:(t+1)])
     StdRoll63days = df2tensor(df.rolling(63).std())[-1]
 
@@ -65,20 +66,17 @@ def MACD_reward(data,t):
 
     action_vec = df2tensor([MACD_signal(data,t),MACD_signal(data,t-1)])
 
-    #r_vec = data[1:(t+1)] - data[0:t]
-    #r_vec = (data[1:(t+1)] - data[0:t])/data[0:t]
     r_vec = data[(t-251):(t+1)]-data[(t-252):t]
     r_df  = pd.DataFrame(r_vec)
     ex_ante_sigma = df2tensor(r_df.ewm(span=60).std())
 
     sigma_vec = df2tensor([ex_ante_sigma[-1],ex_ante_sigma[-2]])
 
-    #r = r_vec[-1]
     r = data[t+1] - data[t]
     p = data[t]
 
-    tgt_volatility = 0.10
-    bp = 0.0000025
+    tgt_volatility = 0.15
+    bp = 0.002
 
     reward1 = action_vec[0]*r*tgt_volatility/sigma_vec[0]
     reward2 = action_vec[0]*tgt_volatility/sigma_vec[0] - action_vec[1]*tgt_volatility/sigma_vec[1]
@@ -91,20 +89,17 @@ def MACD_reward(data,t):
 def long_only_reward(data,t):
 
     action_vec = df2tensor([1,1])
-    #r_vec = data[1:(t+1)] - data[0:t]
-    #r_vec = (data[1:(t+1)] - data[0:t])/data[0:t]
     r_vec = data[(t-251):(t+1)]-data[(t-252):t]
     r_df  = pd.DataFrame(r_vec)
     ex_ante_sigma = df2tensor(r_df.ewm(span=60).std())
 
     sigma_vec = df2tensor([ex_ante_sigma[-1],ex_ante_sigma[-2]])
 
-    #r = r_vec[-1]
     r = data[t+1] - data[t]
     p = data[t]
 
-    tgt_volatility = 0.10
-    bp = 0.0000025
+    tgt_volatility = 0.15
+    bp = 0.002
 
     reward1 = action_vec[0]*r*tgt_volatility/sigma_vec[0]
     reward2 = action_vec[0]*tgt_volatility/sigma_vec[0] - action_vec[1]*tgt_volatility/sigma_vec[1]
@@ -114,26 +109,25 @@ def long_only_reward(data,t):
 
 
 
-def Sgn_reward(data,t):
+def sign_reward(data,t):
 
-    # Good
-    #df1 = (data[(t-251):(t+1)]-data[(t-252):t])//data[(t-252):t]
-    #df2 = (data[(t-252):t]-data[(t-253):(t-1)])//data[(t-253):(t-1)]
+    #expected_trend1 = torch.true_divide(data[t]-data[t-252],data[t-252])
+    #expected_trend2 = torch.true_divide(data[t-1]-data[t-253],data[t-253])
 
-    #expected_trend1 = (data[t]-data[t-252])/data[t-252]
-    #expected_trend2 = (data[t-1]-data[t-253])/data[t-253]
+    data_new = pd.DataFrame(data)
 
-    expected_trend1 = torch.true_divide(data[t]-data[t-252],data[t-252])
-    expected_trend2 = torch.true_divide(data[t-1]-data[t-253],data[t-253])
+    data1 = data_new[(t-251):(t+1)]
+    data2 = data_new[(t-252):t]
+    data3 = data_new[(t-253):(t-1)]
+    data1 = data1.reset_index()[0]
+    data2 = data2.reset_index()[0]
+    data3 = data3.reset_index()[0]
 
-    #df1 = torch.div(data[(t-251):(t+1)]-data[(t-252):t],data[(t-252):t])
-    #df2 = torch.div(data[(t-252):t]-data[(t-253):(t-1)],data[(t-253):(t-1)])
-    #df1 = data[1:t] - data[0:(t-1)]
-    #df2 = data[1:(t+1)] - data[0:t]
+    df1 = df2tensor((data1-data2)/data2)
+    df2 = df2tensor((data2-data3)/data3)
 
-    # Good
-    #expected_trend1 = df1.float().mean()
-    #expected_trend2 = df2.float().mean()
+    expected_trend1 = df1.mean()
+    expected_trend2 = df2.mean()
 
     #taking a maximum long position when the expected trend is positive
     action_vec = [1]*2
@@ -143,7 +137,6 @@ def Sgn_reward(data,t):
        action_vec[1] = -1
 
     r_vec = data[(t-251):(t+1)]-data[(t-252):t]
-    #r_vec = data[1:(t+1)] - data[0:t]
     r_df  = pd.DataFrame(r_vec)
     ex_ante_sigma = df2tensor(r_df.ewm(span=60).std())
 
@@ -152,8 +145,8 @@ def Sgn_reward(data,t):
     r = data[t+1] - data[t]
     p = data[t]
 
-    tgt_volatility = 0.10
-    bp = 0.0000025
+    tgt_volatility = 0.15
+    bp = 0.002
 
     reward1 = action_vec[0]*r*tgt_volatility/sigma_vec[0]
     reward2 = action_vec[0]*tgt_volatility/sigma_vec[0] - action_vec[1]*tgt_volatility/sigma_vec[1]
