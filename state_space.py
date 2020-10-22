@@ -1,21 +1,12 @@
-import torch
-import numpy as np
-import pandas as pd
+from util import *
+import time
 
-# convert 1D dataframe to tensor
-def df2tensor(df):
-    return torch.tensor(np.array(df))
-
-### FUNCTION ONE ###
-# NORMALIZED PRICES
-# normalize data (tensor)
+# normalize price series (tensor)
 def normalize_prices(data):
     mu    = torch.mean(data)
     sigma = torch.std(data)
     return (data-mu)/sigma
 
-### FUNCTION TWO ###
-# NORMALIZED RETURNS
 # normalized returns from price data up to time t
 def normalize_returns(data, t):
     return1Month = (data[t]-data[t-30])/data[t-30]
@@ -26,13 +17,11 @@ def normalize_returns(data, t):
     totalReturn = (data[1:(t+1)]-data[0:t])/data[0:t]
     df = pd.DataFrame(totalReturn)
 
-    # the first value of each tensor is nan here. Verify how df.ewn works
     EWSTD1Month = df2tensor(df.ewm(span=5).std())
     EWSTD2Month = df2tensor(df.ewm(span=10).std())
     EWSTD3Month = df2tensor(df.ewm(span=15).std())
     EWSTD1Year  = df2tensor(df.ewm(span=60).std())
 
-    # don't need [[]] to index
     sd1Month = EWSTD1Month[-1]
     sd2Month = EWSTD2Month[-1]
     sd3Month = EWSTD3Month[-1]
@@ -48,10 +37,8 @@ def normalize_returns(data, t):
 
     return df2tensor(normalReturns)
 
-### FUNCTION THREE ###
 # MACD
-def MACD(data,t):
-
+def MACD(data, t):
     df = pd.DataFrame(data[:(t+1)])
     StdRoll63days = df2tensor(df.rolling(63).std())[-1]
 
@@ -75,7 +62,6 @@ def MACD(data,t):
 
     return df2tensor(macdVec).mean()
 
-### FUNCTION FOUR ###
 # RSI INDICATOR
 def RSI (data,t):
 
@@ -107,9 +93,8 @@ def RSI (data,t):
 
     return df2tensor(rsi)[-1]
 
-# Function to retrieve a list of size at time t
-def state_space1 (data,t):
-
+# Function to retrieve a tensor of size 7 at time t
+def daily_features(data, t):
     normalized_price  = normalize_prices(data)[t]
     normalized_return = normalize_returns(data,t)
     MACD_value        = MACD(data,t)
@@ -120,7 +105,7 @@ def state_space1 (data,t):
     three_mth_return  = normalized_return[2]
     one_yr_return     = normalized_return[3]
 
-    state_space = [normalized_price,
+    features = [normalized_price,
                    one_mth_return,
                    two_mth_return,
                    three_mth_return,
@@ -128,20 +113,15 @@ def state_space1 (data,t):
                    MACD_value,
                    RSI_value]
 
-    return df2tensor(state_space)
+    return torch.tensor(features)
 
 # LOOPING THROUGH DATA TO RETRIEVE A 7x60 STATE SPACE FROM TIME 't' TO 't-59'
-def state_space2 (data,t):
+def daily_state(data, t):
+    state = []
+    for i in range(t-59, t+1):
+        state.append(daily_features(data, i))
 
-    state_space_info = [[]]*60
-    for i in range(60) :
-        tt = t-i
-        state_space_info[i] = np.array(state_space1(data,tt))
-
-    state_space_info = np.array(state_space_info)
-    state_space      = [list(x) for x in state_space_info.transpose()]
-
-    return df2tensor(state_space)
+    return torch.stack(state)
 
 
 # LOOPING THROUGH DATA TO RETRIEVE A 7x60 STATE SPACE FROM TIME 't' TO 't-59'
@@ -193,8 +173,36 @@ def state_space(data):
     t_days = len(data[t:])
     state_space_n_t = torch.zeros(size=(nbr_assets, t_days, 7, 60))
 
+    i = 0
     for col in data.columns:
       x = df2tensor(data[col])
       state_space_n_t[i,:, :, :] = state_space3(x)
+      i+=1
 
     return state_space_n_t
+
+if __name__ == '__main__':
+    # test commodoties data
+    data_all = pd.read_csv('cleaned_data.csv').drop(columns='date')
+    cols = [c for c in data_all.columns if 'Comdty' in c]
+    data_all = data_all[cols]
+    data = data_all[:500][cols[:3]]
+    data = df2tensor(data[cols[0]])
+
+    T = len(data) - 1
+    t1 = time.time()
+    state = daily_state(data, T)
+    t2 = time.time()
+    print("computed state in {:.2f} seconds".format(t2-t1))
+    print(state.size())
+
+    print(data_all[500:2000].size * (t2-t1) / 3600)
+
+    #states = state_space(data)
+
+    # n_assets = 10
+    # n_days = 1000
+    # seq_length = 60
+    # features = 7
+    #
+    # states = torch.rand(n_assets, n_days, seq_length, features)

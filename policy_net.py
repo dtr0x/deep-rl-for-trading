@@ -5,15 +5,8 @@ import torch.nn as nn
 input_dim = 7
 hidden_dim1 = 64
 hidden_dim2 = 32
-learning_rate = 1e-4
-num_epochs = 20
 drop_rate = 0.2
 seq_len = 60
-batch_size = 64
-discount_factor = 0.3
-bp = 2e-3
-replay_capacity = 5000
-target_update = 1000
 
 class PolicyNet(nn.Module):
     def __init__(self, is_dqn=True):
@@ -49,7 +42,7 @@ class PolicyNet(nn.Module):
     # assumed input size: batch_size * seq_len * input_dim
     def forward(self, input):
         # reshape input for LSTM input dimensions
-        i = input.view(seq_len, batch_size, input_dim)
+        i = input.view(seq_len, -1, input_dim)
 
         output, _ = self.lstm1(i)
         print("lstm layer 1 output size: ", output.size())
@@ -72,6 +65,7 @@ class PolicyNet(nn.Module):
 
         if self.is_dqn:
             output = self.softmax(output)
+            output = output.argmax(dim=1) - 1 # action in {-1, 0, 1}
         else:
             # scale output to (-1, 1)
             output = self.tanh(output)
@@ -84,4 +78,4 @@ if __name__ == '__main__':
     dqn = PolicyNet()
     out = dqn.forward(t)
 
-    print(out.size())
+    print(out)

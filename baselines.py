@@ -1,14 +1,8 @@
-import torch
-import numpy as np
-import pandas as pd
+from util import *
 
-
-# convert 1D dataframe to tensor (avoid inporting tensorflow)
-def df2tensor(df):
-    return torch.tensor(np.array(df))
+# Functions for baseline algorithms
 
 def MACD(data,t):
-
     df = pd.DataFrame(data[:(t+1)])
     StdRoll63days = df2tensor(df.rolling(63).std())[-1]
 
