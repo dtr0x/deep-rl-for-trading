@@ -14,20 +14,16 @@ if __name__ == '__main__':
     # remove 'ticker' column name
     data.columns.name = None
 
-    # get data after 2004
-    data = data[data['date'] >= '2004-01-01']
-
     # drop columns with too many NaNs
     data = data.drop(columns=['WN1 Comdty', 'QC1 Index', 'XB1 Comdty', 'ST1 Index'])
 
     # get first date where no columns have NaNs
     init_date = data.dropna()['date'].tolist()[0]
-
     # reset first date
     data = data[data['date'] >= init_date]
-
-    # forward filling all NA values
     data = data.reset_index(drop=True)
+    
+    # forward filling all NA values
     n = data.shape[0]
     k = data.shape[1]-1
     colnames = data.columns[1:]
