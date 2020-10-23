@@ -1,208 +1,79 @@
-from util import *
-import time
+import numpy as np
+import pandas as pd
 
-# normalize price series (tensor)
-def normalize_prices(data):
-    mu    = torch.mean(data)
-    sigma = torch.std(data)
-    return (data-mu)/sigma
+'''Helper functions to compute state space from price data.'''
 
-# normalized returns from price data up to time t
-def normalize_returns(data, t):
-    return1Month = (data[t]-data[t-30])/data[t-30]
-    return2Month = (data[t]-data[t-60])/data[t-60]
-    return3Month = (data[t]-data[t-90])/data[t-90]
-    return1Year  = (data[t]-data[t-252])/data[t-252]
+# normalized prices over one year up to time t, return last value
+def norm_price(prices, t):
+    x = prices[(t-251):(t+1)] # one year of data
+    mu    = np.mean(x)
+    sigma = np.std(x)
+    return ((x-mu)/sigma)[-1]
 
-    totalReturn = (data[1:(t+1)]-data[0:t])/data[0:t]
-    df = pd.DataFrame(totalReturn)
+# normalized returns over one year from price series up to time t
+def norm_returns(prices, t):
+    periods = [30,60,90,252]
+    rets = [(prices[t]-prices[t-p])/prices[t-p] for p in periods]
+    returns1Year = (prices[(t-251):(t+1)]-prices[(t-252):t])/prices[(t-252):t]
+    s = pd.Series(returns1Year)
+    stddev = [s.ewm(span=i).std().tolist()[-1] for i in [5,10,15,60]]
+    normalReturns = [r/sd/np.sqrt(p) for r, sd, p in zip(rets, stddev, periods)]
+    return np.array(normalReturns)
 
-    EWSTD1Month = df2tensor(df.ewm(span=5).std())
-    EWSTD2Month = df2tensor(df.ewm(span=10).std())
-    EWSTD3Month = df2tensor(df.ewm(span=15).std())
-    EWSTD1Year  = df2tensor(df.ewm(span=60).std())
+# MACD using one year look back window up to time t
+def macd(prices, t):
+    s = pd.Series(prices[(t-251):(t+1)])
+    stdRoll63Days = s.rolling(63).std().tolist()[-1]
+    maShort = np.array([s.ewm(span=i).mean().tolist() for i in [8, 16, 32]])
+    maLong = np.array([s.ewm(span=i).mean().tolist() for i in [24, 48, 96]])
+    q = ((maShort - maLong)/stdRoll63Days).transpose()
+    stdRoll252Days = np.array(pd.DataFrame(q).rolling(252).std().tail(1))
+    macd = q[-1, :]/stdRoll252Days
+    return macd.mean()
 
-    sd1Month = EWSTD1Month[-1]
-    sd2Month = EWSTD2Month[-1]
-    sd3Month = EWSTD3Month[-1]
-    sd1Year  = EWSTD1Year[-1]
-
-    # use np.sqrt to avoid importing math module
-    finalReturn1Month = return1Month/(sd1Month*np.sqrt(30))
-    finalReturn2Month = return2Month/(sd2Month*np.sqrt(60))
-    finalReturn3Month = return3Month/(sd3Month*np.sqrt(90))
-    finalReturn1Year  = return1Year/(sd1Year*np.sqrt(252))
-
-    normalReturns = [finalReturn1Month,finalReturn2Month,finalReturn3Month,finalReturn1Year]
-
-    return df2tensor(normalReturns)
-
-# MACD
-def MACD(data, t):
-    df = pd.DataFrame(data[:(t+1)])
-    StdRoll63days = df2tensor(df.rolling(63).std())[-1]
-
-    EWMA1short = df.ewm(span=8).mean()
-    EWMA2short = df.ewm(span=16).mean()
-    EWMA3short = df.ewm(span=32).mean()
-    EWMA1long  = df.ewm(span=24).mean()
-    EWMA2long  = df.ewm(span=48).mean()
-    EWMA3long  = df.ewm(span=96).mean()
-
-    maShort = EWMA1short, EWMA2short, EWMA3short
-    maLong = EWMA1long, EWMA2long, EWMA3long
-
-    q = [[0]]*3
-    StdRoll252daystest = [0]*3
-    macdVec = [0]*3
-    for i in range(3):
-      q[i] = (maShort[i] - maLong[i])/StdRoll63days
-      StdRoll252daystest[i] = df2tensor(q[i].rolling(252).std())[-1]
-      macdVec[i] = df2tensor(q[i])[-1]/StdRoll252daystest[i]
-
-    return df2tensor(macdVec).mean()
-
-# RSI INDICATOR
-def RSI (data,t):
-
-    # 0:t+1 because index returns back [0:t+1) not inclusive!
-    data1 = data[0:(t+1)]
-    df    = pd.DataFrame(data1)
-    diff  = df.diff(1).dropna()        # diff in one field(one day)
-
-    #this preservers dimensions off diff values
-    up_chg = 0 * diff
-    down_chg = 0 * diff
-
+# RSI indicator using one year look back window up to time t
+def rsi(prices, t):
+    x = prices[(t-251):(t+1)]
+    diff  = x[1:] - x[:-1]
+    up_chg = np.zeros_like(diff)
+    down_chg = np.zeros_like(diff)
     # up change is equal to the positive difference, otherwise equal to zero
-    up_chg[diff > 0] = diff[ diff>0 ]
-
+    u_idx = np.where(diff > 0)[0]
+    up_chg[u_idx] = diff[u_idx]
     # down change is equal to negative deifference, otherwise equal to zero
-    down_chg[diff < 0] = diff[ diff < 0 ]
-
+    d_idx = np.where(diff < 0)[0]
+    down_chg[d_idx] = diff[d_idx]
     # we set com=time_window-1 so we get decay alpha=1/time_window
-    # where time_window = 30 (from paper)
     time_window = 30
-    up_chg_avg   = up_chg.ewm(com=time_window-1 , min_periods=time_window).mean()
-    down_chg_avg = down_chg.ewm(com=time_window-1 , min_periods=time_window).mean()
-
+    up_chg_avg = pd.Series(up_chg).ewm(com=time_window-1 , min_periods=time_window).mean().tolist()[-1]
+    down_chg_avg = pd.Series(down_chg).ewm(com=time_window-1 , min_periods=time_window).mean().tolist()[-1]
+    # compute RSI
     rs = abs(up_chg_avg/down_chg_avg)
     rsi = 100 - 100/(1+rs)
-    #RSI = df2tensor(rsi[t-1,0])
-    #RSIval = RSI[t-1,0]
-
-    return df2tensor(rsi)[-1]
+    return rsi
 
 # Function to retrieve a tensor of size 7 at time t
-def daily_features(data, t):
-    normalized_price  = normalize_prices(data)[t]
-    normalized_return = normalize_returns(data,t)
-    MACD_value        = MACD(data,t)
-    RSI_value         = RSI(data,t)
+def daily_features(prices, t):
+    f = np.zeros(7, dtype='float32')
+    f[0] = norm_price(prices, t)
+    f[1:5] = norm_returns(prices, t)
+    f[5] = macd(prices, t)
+    f[6] = rsi(prices, t)
+    return f
 
-    one_mth_return    = normalized_return[0]
-    two_mth_return    = normalized_return[1]
-    three_mth_return  = normalized_return[2]
-    one_yr_return     = normalized_return[3]
-
-    features = [normalized_price,
-                   one_mth_return,
-                   two_mth_return,
-                   three_mth_return,
-                   one_yr_return,
-                   MACD_value,
-                   RSI_value]
-
-    return torch.tensor(features)
-
-# LOOPING THROUGH DATA TO RETRIEVE A 7x60 STATE SPACE FROM TIME 't' TO 't-59'
-def daily_state(data, t):
+# Get state for time t, dim=60x7
+def daily_state(prices, t):
     state = []
     for i in range(t-59, t+1):
-        state.append(daily_features(data, i))
+        state.append(daily_features(prices, i))
+    return np.array(state)
 
-    return torch.stack(state)
-
-
-# LOOPING THROUGH DATA TO RETRIEVE A 7x60 STATE SPACE FROM TIME 't' TO 't-59'
-# for all columuns i.e. returning state space dimension n*7*60 for day t
-def state_space3 (data):
-
-    t = 312
-    T = list(data.shape)[0]-1
-    t_days = len(range(t,T))
-
-    # initialize the tensor of desired size with 0s
-    state_space_tvec = torch.zeros(size=(t_days+1, 7, 60))
-    for j in range(t_days):
-      state_space_tvec[j, :, :] = state_space2(data,t)
-
-    return state_space_tvec
-
-# returning state space by asset dimension n*7*60*t FOR ALL DAYS t
-# asset is a character: comodity, currency or index
-def state_space4 (data,asset_type):
-
-    if asset_type == "comodity":
-      asset = "Comdty"
-    elif asset_type == "currency":
-      asset = "Curncy"
-    else:
-      asset = "Index"
-
-    data = data.loc[:,data.columns.str.endswith(asset_type)]
-    nbr_assets = data.shape[1]
-    data.columns = range(0,nbr_assets)
-
-    t = 312
-    T = list(data.shape)[0]-1
-    t_days = len(range(t,T))
-    state_space_n_t = torch.zeros(size=(nbr_assets, t_days, 7, 60))
-
-    for i in range(nbr_assets):
-      df = torch.tensor(data[i])
-      state_space_n_t[i,:, :, :] = state_space3(df)
-
-    return state_space_n_t
-
-# returning state space for all assets dimension n*7*60*t FOR ALL DAYS t
-def state_space(data):
-    nbr_assets = data.shape[1]
-
-    t = 312 # min t value where we can compute a state
-    t_days = len(data[t:])
-    state_space_n_t = torch.zeros(size=(nbr_assets, t_days, 7, 60))
-
+# Compute all states from price series, starting from an initial time
+def get_states_iter(prices, t0):
+    n_states = len(prices) - t0
+    states = np.zeros((n_states, 60, 7), dtype='float32')
     i = 0
-    for col in data.columns:
-      x = df2tensor(data[col])
-      state_space_n_t[i,:, :, :] = state_space3(x)
-      i+=1
-
-    return state_space_n_t
-
-if __name__ == '__main__':
-    # test commodoties data
-    data_all = pd.read_csv('cleaned_data.csv').drop(columns='date')
-    cols = [c for c in data_all.columns if 'Comdty' in c]
-    data_all = data_all[cols]
-    data = data_all[:500][cols[:3]]
-    data = df2tensor(data[cols[0]])
-
-    T = len(data) - 1
-    t1 = time.time()
-    state = daily_state(data, T)
-    t2 = time.time()
-    print("computed state in {:.2f} seconds".format(t2-t1))
-    print(state.size())
-
-    print(data_all[500:2000].size * (t2-t1) / 3600)
-
-    #states = state_space(data)
-
-    # n_assets = 10
-    # n_days = 1000
-    # seq_length = 60
-    # features = 7
-    #
-    # states = torch.rand(n_assets, n_days, seq_length, features)
+    for t in range(t0, len(prices)):
+        states[i] = daily_state(prices, t)
+        i += 1
+    return states
