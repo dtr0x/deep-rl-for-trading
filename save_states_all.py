@@ -50,10 +50,10 @@ if __name__ == '__main__':
 
     t1 = time.time()
     # compute states for all assets in parallel (prices row-wise)
-    result = [pool.apply_async(get_states_iter, args=(x, t0)) for x in prices.transpose()[:, :(t0+20)]]
+    result = [pool.apply_async(get_states_iter, args=(x, t0)) for x in prices.transpose()]
     states_all = np.array([r.get() for r in result])
     t2 = time.time()
     print("Computed states for all assets in {:.2f} minutes.".format((t2-t1)/60))
 
     # save states and corresponding prices (compressed)
-    np.savez_compressed('state_data.npz', prices=prices[t0:(t0+20), :], states=states_all)
+    np.savez_compressed('state_data.npz', prices=prices[t0:], states=states_all)
