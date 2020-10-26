@@ -2,20 +2,20 @@ from state_space import get_states_iter
 import numpy as np
 import pandas as pd
 import multiprocessing as mp
-import time, re
+import torch, time, re
 
 '''Compute all states for all assets in parallel and save data.'''
 
-# Helper function to load all states and corresponding prices
+# Helper function to load all states, corresponding prices and ex ante sigma values
 # accepted asset_type: 'all', 'commodity', 'currency', 'index'
 def load_states(asset_type='all'):
     state_data = np.load('state_data.npz')
 
-    P = state_data['prices']
-    S = state_data['states']
+    S = torch.tensor(state_data['states'], dtype=torch.float32)
+    P =  torch.tensor(state_data['prices'].transpose(), dtype=torch.float32)
 
     if asset_type == 'all':
-        return P, S
+        return S, P
     else:
         if asset_type == 'commodity':
             r = r'Comdty$'
@@ -30,17 +30,17 @@ def load_states(asset_type='all'):
         # get indices for assets of specified type
         asset_idx = np.where([re.search(r, c) for c in cols])[0]
 
-        P = P[:, asset_idx] # n_days * n_assets
         S = S[asset_idx] # n_assets * n_days * 60 * 7
+        P = P[asset_idx] # n_assets * n_days
+        # ex ante sigma values for each day to compute rewards
+        sigall = torch.load('ex_ante_sigma.pt')[asset_idx] # n_assets * n_days * 2
 
-        return P, S
+        return S, P, sigall
 
 if __name__ == '__main__':
     data = pd.read_csv('cleaned_data.csv')
-
     # initial time index: compute and save states starting from 2005
     t0 = data[data['date'] >= '2005'].index[0]
-
     prices = np.array(data.drop(columns='date'), dtype='float32')
 
     # initialize processing pool

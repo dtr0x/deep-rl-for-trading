@@ -1,42 +1,38 @@
-from baselines import *
+import numpy as np
+import pandas as pd
+import torch
 
-# INPUT: raw data, time t, action at time t-1 and action at time t
-# OUTPUT: reward at time t+1
-def reward(data,t,action_prev,action_now):
+# pre-compute ex ante sigmas for price series
+def ex_ante_sigma(prices, t0):
+    n_days = len(prices) - t0
+    sigmas = np.zeros((n_days, 2), dtype='float32')
+    i = 0
+    for t in range(t0, len(prices)):
+        r = prices[(t-251):(t+1)] - prices[(t-252):t]
+        s = pd.Series(r).ewm(span=60).std().tolist()[-2:]
+        sigmas[i] = s
+        i += 1
+    return sigmas
 
-    action_vec = [0]*2
-    action_vec[0] = action_prev
-    action_vec[1] = action_now
+# pre-compute ex ante sigmas for all days/assets
+def get_sigma_all(prices, t0):
+    n_assets = prices.shape[1]
+    f = lambda x: ex_ante_sigma(x, t0) # function to compute sigma over price series
+    sigall = np.apply_along_axis(f, 0, prices)
+    return torch.tensor(sigall, dtype=torch.float32).view(n_assets, -1, 2)
 
-    r_vec = data[(t-251):(t+1)]-data[(t-252):t]
-    r_df  = pd.DataFrame(r_vec)
-    ex_ante_sigma = df2tensor(r_df.ewm(span=60).std())
+# Compute reward (Equation (4) in 'Deep Reinforcement Learning for Trading' with mu=1).
+def reward(prices, prices_next, sigma, actions, actions_prev, tgt_vol, bp):
+    r = prices_next - prices
+    x = actions*tgt_vol/sigma[:,1]
+    y = actions_prev*tgt_vol/sigma[:,0]
+    return x*r - bp*prices*torch.abs(x-y)
 
-    sigma_vec = df2tensor([ex_ante_sigma[-1],ex_ante_sigma[-2]])
-
-    r = data[t+1] - data[t]
-    p = data[t]
-
-    tgt_volatility = 0.10
-    bp = 0.002
-
-    reward1 = action_vec[0]*r*tgt_volatility/sigma_vec[0]
-    reward2 = action_vec[0]*tgt_volatility/sigma_vec[0] - action_vec[1]*tgt_volatility/sigma_vec[1]
-    reward  = reward1 - bp*p*abs(reward2)
-
-    return reward
-
-# INPUT: data set,  time t, tensor of action at time t-1, and
-#        tensor of actions at time t
-# OUTPUT: tensor of rewards for time t+1
-def get_reward(data,t,action_vec_prev,action_vec_now):
-
-    nbr_assets = len(action_vec_prev)
-    data.columns = range(0,nbr_assets)
-
-    reward_vec = [0]*nbr_assets
-    for i in range(nbr_assets):
-        df = df2tensor(data[i])
-        reward_vec[i] = reward(df,t,action_vec_prev[i],action_vec_now[i])
-
-    return df2tensor(reward_vec)
+if __name__ == '__main__':
+    # pre-compute all ex ante sigma values
+    data = pd.read_csv('cleaned_data.csv')
+    # initial time index: compute and save states starting from 2005
+    t0 = data[data['date'] >= '2005'].index[0]
+    prices = np.array(data.drop(columns='date'), dtype='float32')
+    sigall = get_sigma_all(prices, t0)
+    torch.save(sigall, 'ex_ante_sigma.pt')
