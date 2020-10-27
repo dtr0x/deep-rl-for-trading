@@ -1,6 +1,8 @@
 from collections import namedtuple
 import random
 
+''' Define replay memory for DQN training '''
+
 # State transition tuple
 Transition = namedtuple('Transition',
                         ('state', 'action', 'next_state', 'reward'))

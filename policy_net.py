@@ -45,27 +45,26 @@ class PolicyNet(nn.Module):
         i = input.view(seq_len, -1, input_dim)
 
         output, _ = self.lstm1(i)
-        print("lstm layer 1 output size: ", output.size())
+        # print("lstm layer 1 output size: ", output.size())
 
         output = self.dropout(output)
-        print("dropout layer output size: ", output.size())
+        # print("dropout layer output size: ", output.size())
 
         output = self.leaky_relu(output)
-        print("relu layer output size: ", output.size())
+        # print("relu layer output size: ", output.size())
 
         # the output of the last LSTM in the chain (h) is passed to linear
         output, h = self.lstm2(output)
-        print("lstm layer 2 output size: ", output.size())
+        # print("lstm layer 2 output size: ", output.size())
 
         ff_input = h[0].squeeze()
-        print("ff input size: ", ff_input.size())
+        # print("ff input size: ", ff_input.size())
 
         output = self.linear(ff_input)
-        print("linear layer output size: ", output.size())
+        # ("linear layer output size: ", output.size())
 
         if self.is_dqn:
             output = self.softmax(output)
-            output = output.argmax(dim=1) - 1 # action in {-1, 0, 1}
         else:
             # scale output to (-1, 1)
             output = self.tanh(output)
@@ -74,8 +73,9 @@ class PolicyNet(nn.Module):
 
 if __name__ == '__main__':
     # test input/output dims
+    batch_size = 64
     t = torch.randn(batch_size, seq_len, input_dim)
     dqn = PolicyNet()
-    out = dqn.forward(t)
+    out = dqn(t)
 
     print(out)
