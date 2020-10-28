@@ -71,6 +71,12 @@ class PolicyNet(nn.Module):
 
         return output
 
+    def get_actions(self, states):
+        with torch.no_grad():
+            action_values = self(states) # calls forward implicity
+            actions = action_values.argmax(dim=1).type(torch.long) - 1 # action in {-1, 0, 1}
+        return actions
+
 if __name__ == '__main__':
     # test input/output dims
     batch_size = 64

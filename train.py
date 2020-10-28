@@ -37,9 +37,7 @@ def select_action(states, eps):
     sample = random.random()
     if sample > eps:
         # select best action from model with probability 1-epsilon
-        with torch.no_grad():
-            action_values = policy_net(states)
-            actions = action_values.argmax(dim=1).type(torch.long) - 1 # action in {-1, 0, 1}
+        actions = policy_net.get_actions(states)
     else:
         # return random actions
         actions = np.random.choice([-1, 0, 1], len(states))
@@ -60,7 +58,7 @@ if __name__ == '__main__':
     actions_prev = torch.zeros(len(S), device=device)
 
     step = 1 # keep track of all iterations to update target network when step % target_update == 0
-    loss_sum  = 0 # keep track of losses, report average loss over every 100 steps
+    losses = [] # keep track of losses, report average loss every 100 steps
 
     for i_epoch in range(num_epochs):
         # epsilon greedy action selection
@@ -88,11 +86,13 @@ if __name__ == '__main__':
             # Perform gradient descent at each time step
             loss = optimize_model(optimizer, memory, policy_net, target_net, batch_size, discount_factor)
             if loss:
-                loss_sum += loss.item()
+                losses.append(loss.item())
 
             # print average loss every 100 steps
             if step % 100 == 0:
-                print("Average loss after step {}: {:.2f}".format(step, loss_sum/step))
+                avg_loss = np.mean(losses)
+                print("Average loss after step {}: {:.3f}".format(step, avg_loss))
+                losses = []
 
             # update target network after target_update steps
             if step % target_update == 0:
