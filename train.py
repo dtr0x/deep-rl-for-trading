@@ -50,7 +50,7 @@ memory = ReplayMemory(replay_capacity)
 
 if __name__ == '__main__':
     # duration to train for, approximately 5 years 2010-2014
-    train_idx = range(1000,2000)
+    train_idx = range(1000,2500)
     # load commodoties data
     S, P, sigall = [x.to(device) for x in load_states('commodity')]
 
