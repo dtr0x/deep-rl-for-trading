@@ -16,20 +16,17 @@ class PolicyNet(nn.Module):
             input_size=input_dim,
             hidden_size=hidden_dim,
             num_layers=2,
-            dropout=drop_rate
+            dropout=drop_rate,
+            batch_first=True
             )
 
         # discrete action space
         self.linear = nn.Linear(hidden_dim, 3)
         self.softmax = nn.Softmax(dim=1)
 
-    # define forward pass through LSTM with single output in (-1, 1)
     # assumed input size: batch_size * seq_len * input_dim
     def forward(self, input):
-        # reshape input for LSTM input dimensions
-        i = input.view(seq_len, -1, input_dim)
-
-        output, h = self.lstm(i)
+        output, h = self.lstm(input)
 
         ff_input = h[0][1] # get second layer hidden output
 

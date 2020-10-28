@@ -16,10 +16,10 @@ def ex_ante_sigma(prices, t0):
 
 # pre-compute ex ante sigmas for all days/assets
 def get_sigma_all(prices, t0):
-    n_assets = prices.shape[1]
+    n_assets = len(prices)
     f = lambda x: ex_ante_sigma(x, t0) # function to compute sigma over price series
-    sigall = np.apply_along_axis(f, 0, prices)
-    return torch.tensor(sigall, dtype=torch.float32).view(n_assets, -1, 2)
+    sigall = np.apply_along_axis(f, 1, prices)
+    return torch.tensor(sigall, dtype=torch.float32)
 
 # Compute reward (Equation (4) in 'Deep Reinforcement Learning for Trading' with mu=1).
 def reward(prices, prices_next, sigma, actions, actions_prev, tgt_vol, bp):
@@ -33,6 +33,6 @@ if __name__ == '__main__':
     data = pd.read_csv('cleaned_data.csv')
     # initial time index: compute and save states starting from 2005
     t0 = data[data['date'] >= '2005'].index[0]
-    prices = np.array(data.drop(columns='date'), dtype='float32')
+    prices = np.array(data.drop(columns='date'), dtype='float32').transpose()
     sigall = get_sigma_all(prices, t0)
     torch.save(sigall, 'ex_ante_sigma.pt')

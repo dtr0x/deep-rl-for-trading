@@ -2,6 +2,7 @@ import torch
 from policy_net import PolicyNet
 from save_states_all import load_states
 from reinforcement import reward
+import
 
 if __name__ == '__main__':
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -21,8 +22,8 @@ if __name__ == '__main__':
 
     returns = []
     for t in val_idx:
-        states = S[:, t].contiguous()
-        next_states = S[:, t+1].contiguous()
+        states = S[:, t]
+        next_states = S[:, t+1]
         prices = P[:, t]
         prices_next = P[:, t+1]
         sigmas = sigall[:, t]
@@ -30,3 +31,5 @@ if __name__ == '__main__':
         actions = model.get_actions(states)
         rewards = reward(prices, prices_next, sigmas, actions, actions_prev, tgt_vol, bp)
         returns.append(rewards.mean().item())
+
+    crets = np.cumsum(returns)

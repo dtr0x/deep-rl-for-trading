@@ -69,8 +69,8 @@ if __name__ == '__main__':
 
         for t in train_idx:
             # get states/prices/sigma values for each asset
-            states = S[:, t].contiguous() # contiguous in memory to call .view() function
-            next_states = S[:, t+1].contiguous()
+            states = S[:, t]
+            next_states = S[:, t+1]
             prices = P[:, t]
             prices_next = P[:, t+1]
             sigmas = sigall[:, t]
