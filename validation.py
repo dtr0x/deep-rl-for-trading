@@ -15,6 +15,11 @@ if __name__ == '__main__':
     model = PolicyNet().to(device)
 
     S, P, sigall = [x.to(device) for x in load_states('commodity')]
+    nidx = [7,16,20,25,27,32,35]
+    idx = [i for i in np.arange(len(S)) if i not in nidx]
+    S = S[idx]
+    P = P[idx]
+    sigall = sigall[idx]
 
     val_idx = range(2500,4000)
 
@@ -28,7 +33,7 @@ if __name__ == '__main__':
     # long actions
     lo_actions_all = torch.ones_like(macd_actions_all)
 
-    params = torch.load("models/dqn_epoch_20.pt")
+    params = torch.load("models/pg_epoch_20.pt")
     model.load_state_dict(params)
     model.eval()
 
@@ -73,9 +78,9 @@ if __name__ == '__main__':
     plt.plot(np.cumsum(lo_returns), color='blue')
     plt.plot(np.cumsum(macd_returns), color='green')
     plt.plot(np.cumsum(sgn_returns), color='orange')
-    plt.legend(['DQN', 'Long-Only', 'MACD', 'Sign(R)'])
+    plt.legend(['PG', 'Long-Only', 'MACD', 'Sign(R)'])
 
-    plt.savefig('plots/dqn_comms_0.pdf', format='pdf', bbox_inches='tight')
+    plt.savefig('plots/pg_comm_1.pdf', format='pdf', bbox_inches='tight')
 
     plt.show()
     plt.clf()

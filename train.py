@@ -2,71 +2,49 @@ import random, torch
 import numpy as np
 from save_states_all import load_states
 from policy_net import PolicyNet
-from replay_memory import ReplayMemory
 from reinforcement import reward
-from optimization import optimize_model
+import time
 
 # set device for optimization
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Parameters
 discount_factor = 0.3
-replay_capacity = 5000
-target_update = 1000
 learning_rate = 1e-4
 num_epochs = 20
-batch_size = 64
 # for computing rewards (on-device)
 bp = torch.tensor(2e-3, device=device)
 tgt_vol = torch.tensor(0.1, device=device)
 
-# epsilon greedy policy
-eps_start = 0.9
-eps_end = 0.1
-eps_len = int(num_epochs/2) # number of epochs to decay epsilon
-
-# linear annealing of epsilon
-eps_sched = np.linspace(eps_start, eps_end, eps_len)
-
 policy_net = PolicyNet().to(device)
-target_net = PolicyNet().to(device)
-target_net.eval()  # no optimization is performed directly on target network
 
-# The epsilon-greedy policy is applied applied asset-wise
-def select_action(states, eps):
-    sample = random.random()
-    if sample > eps:
-        # select best action from model with probability 1-epsilon
-        actions = policy_net.get_actions(states)
-    else:
-        # return random actions
-        actions = np.random.choice([-1, 0, 1], len(states))
-        actions = torch.tensor(actions, dtype=torch.long, device=device)
-    return actions
-
-# optimizer / memory
 optimizer = torch.optim.Adam(policy_net.parameters(), lr=learning_rate)
-memory = ReplayMemory(replay_capacity)
 
 if __name__ == '__main__':
     # duration to train for, approximately 5 years 2010-2014
     train_idx = range(1000,2500)
     # load commodoties data
     S, P, sigall = [x.to(device) for x in load_states('commodity')]
+    nidx = [7,16,20,25,27,32,35]
+    idx = [i for i in np.arange(len(S)) if i not in nidx]
+    S = S[idx]
+    P = P[idx]
+    sigall = sigall[idx]
 
-    # store previous actions for each asset, initially 0
-    actions_prev = torch.zeros(len(S), device=device)
+    n_assets = len(S)
+    n_steps = len(train_idx)
 
-    step = 1 # keep track of all iterations to update target network when step % target_update == 0
-    losses = [] # keep track of losses, report average loss every 100 steps
+    actions_prev = torch.zeros(n_assets, device=device)
 
     for i_epoch in range(num_epochs):
-        # epsilon greedy action selection
-        if i_epoch < eps_len:
-            eps = eps_sched[i_epoch]
-        else:
-            eps = eps_end
+        t1 = time.time()
+        # Store rewards and actions for this trajectory (epoch)
+        rewards_all = torch.zeros((n_steps, n_assets), dtype=torch.float32, device=device)
+        actions_all = torch.zeros((n_steps, n_assets), dtype=torch.long, device=device)
 
+
+        step = 0 # for indexing rewards/actions
+        # loop to store trajectories
         for t in train_idx:
             # get states/prices/sigma values for each asset
             states = S[:, t]
@@ -74,34 +52,52 @@ if __name__ == '__main__':
             prices = P[:, t]
             prices_next = P[:, t+1]
             sigmas = sigall[:, t]
-            actions = select_action(states, eps) # get actions for each asset
 
-            # compute rewards
+
+            # get actions for each asset
+            actions = policy_net.get_actions(states)
+
+            # compute rewards for each asset
             rewards = reward(prices, prices_next, sigmas, actions, actions_prev, tgt_vol, bp)
 
-            # push individual transitions to replay memory
-            for s, a, ns, r in zip(states, actions, next_states, rewards):
-                memory.push(s, a, ns, r)
+            actions_all[step] = actions
+            rewards_all[step] = rewards
 
-            # Perform gradient descent at each time step
-            loss = optimize_model(optimizer, memory, policy_net, target_net, batch_size, discount_factor)
-            if loss:
-                losses.append(loss.item())
-
-            # print average loss every 100 steps
-            if step % 100 == 0:
-                avg_loss = np.mean(losses)
-                print("Average loss after step {}: {:.3f}".format(step, avg_loss))
-                losses = []
-
-            # update target network after target_update steps
-            if step % target_update == 0:
-                 target_net.load_state_dict(policy_net.state_dict())
-
-            # store actions for next time step to compute reward
             actions_prev = actions
-
             step += 1
 
+        step = 0 # for indexing rewards/actions
+        # loop to optimize parameters
+        for t in train_idx:
+            # get states/prices/sigma values for each asset
+            states = S[:, t]
+            next_states = S[:, t+1]
+            rewards = rewards_all[step:]
+            actions = actions_all[step]
+
+            gamma_exp = torch.tensor([discount_factor**i for i in range(len(rewards))], device=device)
+
+            g = (gamma_exp.unsqueeze(1) * rewards).sum(axis=0)
+
+            # get values of currrent actions from policy net
+            action_values = policy_net(states)
+            action_idx = actions + 1 # action indexes
+            row_idx = torch.arange(action_values.size(0))
+            action_values = action_values[row_idx, action_idx]
+            log_action_values = action_values.log()
+
+            policy_grad_op = discount_factor**step * g * log_action_values
+
+            optimizer.zero_grad() # set gradients to 0 to avoid accumulation
+
+            policy_grad_op.backward(torch.ones_like(policy_grad_op)) # backpropograte to compute gradient wrt parameters
+
+            optimizer.step() # perform gradient descent step
+
+            actions_prev = actions
+            step += 1
+        t2 = time.time()
+        t = (t2-t1)/60
+        print("Finished epoch {} in {:.2f} minutes".format(i_epoch+1, t))
         # save the model every epoch
-        torch.save(target_net.state_dict(), "models/dqn_epoch_{}.pt".format(i_epoch+1))
+        torch.save(policy_net.state_dict(), "models/pg_epoch_{}.pt".format(i_epoch+1))
