@@ -12,7 +12,7 @@ def norm_price(prices, t):
 
 # normalized returns over one year from price series up to time t
 def norm_returns(prices, t):
-    periods = [30,60,90,252]
+    periods = [21,42,63,252]
     rets = [(prices[t]-prices[t-p])/prices[t-p] for p in periods]
     returns1Year = (prices[(t-251):(t+1)]-prices[(t-252):t])/prices[(t-252):t]
     s = pd.Series(returns1Year)
