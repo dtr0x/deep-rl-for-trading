@@ -39,8 +39,8 @@ def load_states(asset_type='all'):
 
 if __name__ == '__main__':
     data = pd.read_csv('cleaned_data.csv')
-    # initial time index: compute and save states starting from 2005
-    t0 = data[data['date'] >= '2005'].index[0]
+    # initial time index
+    t0 = len(data)-252*5*3
     prices = np.array(data.drop(columns='date'), dtype='float32')
 
     # initialize processing pool
