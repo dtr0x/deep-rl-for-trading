@@ -31,8 +31,8 @@ def reward(prices, prices_next, sigma, actions, actions_prev, tgt_vol, bp):
 if __name__ == '__main__':
     # pre-compute all ex ante sigma values
     data = pd.read_csv('cleaned_data.csv')
-    # initial time index: compute and save states starting from 2005
-    t0 = data[data['date'] >= '2005'].index[0]
+    # initial time index
+    t0 = len(data)-252*5*3
     prices = np.array(data.drop(columns='date'), dtype='float32').transpose()
     sigall = get_sigma_all(prices, t0)
     torch.save(sigall, 'ex_ante_sigma.pt')
