@@ -13,9 +13,10 @@ def load_states(asset_type='all'):
 
     S = torch.tensor(state_data['states'], dtype=torch.float32)
     P =  torch.tensor(state_data['prices'].transpose(), dtype=torch.float32)
+    sigall = torch.load('ex_ante_sigma.pt')
 
     if asset_type == 'all':
-        return S, P
+        return S, P, sigall
     else:
         if asset_type == 'commodity':
             r = r'Comdty$'
@@ -33,7 +34,7 @@ def load_states(asset_type='all'):
         S = S[asset_idx] # n_assets * n_days * 60 * 7
         P = P[asset_idx] # n_assets * n_days
         # ex ante sigma values for each day to compute rewards
-        sigall = torch.load('ex_ante_sigma.pt')[asset_idx] # n_assets * n_days * 2
+        sigall = sigall[asset_idx] # n_assets * n_days * 2
 
         return S, P, sigall
 

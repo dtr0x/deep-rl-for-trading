@@ -6,7 +6,7 @@ import pandas as pd
 # normalized prices over one year up to time t, return last value
 def norm_price(prices, t):
     x = prices[(t-251):(t+1)] # one year of data
-    mu    = np.mean(x)
+    mu = np.mean(x)
     sigma = np.std(x)
     return ((x-mu)/sigma)[-1]
 

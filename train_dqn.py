@@ -5,35 +5,21 @@ from policy_net import PolicyNet
 from replay_memory import ReplayMemory
 from reinforcement import reward
 from optimization import optimize_model
+import time, argparse
 
 # set device for optimization
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# Parameters
-discount_factor = 0.3
-replay_capacity = 5000
-target_update = 1000
-learning_rate = 1e-4
-num_epochs = 20
-batch_size = 64
-# for computing rewards (on-device)
-bp = torch.tensor(2e-3, device=device)
-tgt_vol = torch.tensor(0.1, device=device)
-
 # epsilon greedy policy
 eps_start = 0.9
 eps_end = 0.1
-eps_len = int(num_epochs/2) # number of epochs to decay epsilon
+eps_len = 10 # number of epochs to decay epsilon
 
 # linear annealing of epsilon
 eps_sched = np.linspace(eps_start, eps_end, eps_len)
 
-policy_net = PolicyNet().to(device)
-target_net = PolicyNet().to(device)
-target_net.eval()  # no optimization is performed directly on target network
-
 # The epsilon-greedy policy is applied applied asset-wise
-def select_action(states, eps):
+def select_action(policy_net, states, eps):
     sample = random.random()
     if sample > eps:
         # select best action from model with probability 1-epsilon
@@ -44,64 +30,140 @@ def select_action(states, eps):
         actions = torch.tensor(actions, dtype=torch.long, device=device)
     return actions
 
-# optimizer / memory
-optimizer = torch.optim.Adam(policy_net.parameters(), lr=learning_rate)
-memory = ReplayMemory(replay_capacity)
+# main training function
+# Input:
+#   policy_net: network to optimize during training
+#   target_net: network to update after target_update iterations
+#   memory: replay memory
+#   optimizer: optimization scheme (gradient descent)
+#   asset type: 'all', 'commodity', 'currency', or 'index'
+#   min_year: initial year to start training (2006-2019)
+#   max_year: year to end training (> min_year, 2007-2020)
+#   val_frac: the fraction of training data to use for validation
+#   discount_factor: gamma for Q-learning
+#   target_update: number of iterations until target network is updated
+#   batch_size: number of transitions to pass to optimizer at each iteration
+#   bp: penalty for trade commission (see reward function)
+#   tgt_vol: target volatility (see reward function)
+def train_dqn(policy_net, target_net, memory, optimizer, asset_type, min_year=2006,
+    max_year=2010, val_frac=0.1, discount_factor=0.3, target_update=1000,
+    batch_size=64, bp=0.002, tgt_vol=0.1):
+    # durations to train/validate for
+    min_year = min_year % 2006 + 1
+    max_year = max_year % 2006 + 1
+    min_idx = 252*(min_year-1)
+    max_idx = 252*max_year - 1
+    val_idx_min = int((1-val_frac) * (max_idx-min_idx)) + min_idx
+    train_idx = range(min_idx, val_idx_min)
+    val_idx = range(val_idx_min, max_idx)
 
-if __name__ == '__main__':
-    # duration to train for, approximately 5 years 2010-2014
-    train_idx = range(1000,2500)
-    # load commodoties data
-    S, P, sigall = [x.to(device) for x in load_states('commodity')]
+    # load data
+    S, P, sigall = [x.to(device) for x in load_states(asset_type)]
 
-    # store previous actions for each asset, initially 0
-    actions_prev = torch.zeros(len(S), device=device)
-
+    # flag for early stopping
+    early_stop = False
     step = 1 # keep track of all iterations to update target network when step % target_update == 0
-    losses = [] # keep track of losses, report average loss every 100 steps
+    i_epoch = 1
+    while not early_stop:
+        t1 = time.time()
 
-    for i_epoch in range(num_epochs):
+        # store optimal parameters for early stopping
+        best_params = policy_net.state_dict()
         # epsilon greedy action selection
-        if i_epoch < eps_len:
-            eps = eps_sched[i_epoch]
+        if i_epoch <= eps_len:
+            eps = eps_sched[i_epoch-1]
         else:
             eps = eps_end
 
+        # store previous actions for each asset, initially 0
+        actions_prev = torch.zeros(len(S), device=device)
+
+        losses = []
+        # training loop
         for t in train_idx:
+            states = S[:, t]
+            next_states = S[:, t+1]
+            prices = P[:, t]
+            prices_next = P[:, t+1]
+            sigmas = sigall[:, t]
+
+            # Cycle through assets, store transitions and optimize
+            for i in range(len(S)):
+                a = select_action(policy_net, states[i].unsqueeze(0), eps)
+                r = reward(prices[i], prices_next[i], sigmas[i].unsqueeze(0), a,
+                    actions_prev[i], tgt_vol, bp)
+                actions_prev[i] = a
+                memory.push(states[i], a, next_states[i], r)
+                loss = optimize_model(optimizer, memory, policy_net, target_net, batch_size,
+                discount_factor)
+                if loss:
+                    losses.append(loss.item())
+
+                # update target network after target_update steps
+                if step % target_update == 0:
+                     target_net.load_state_dict(policy_net.state_dict())
+                     avg_loss = np.mean(losses)
+                     print("Average loss after step {}: {:.3f}".format(step, avg_loss))
+                     losses = []
+
+                step += 1
+
+        # validation loop
+        val_returns = []
+        for t in val_idx:
             # get states/prices/sigma values for each asset
             states = S[:, t]
             next_states = S[:, t+1]
             prices = P[:, t]
             prices_next = P[:, t+1]
             sigmas = sigall[:, t]
-            actions = select_action(states, eps) # get actions for each asset
-
+            actions = policy_net.get_actions(states) # get actions from DQN
             # compute rewards
             rewards = reward(prices, prices_next, sigmas, actions, actions_prev, tgt_vol, bp)
-
-            # push individual transitions to replay memory
-            for s, a, ns, r in zip(states, actions, next_states, rewards):
-                memory.push(s, a, ns, r)
-
-            # Perform gradient descent at each time step
-            loss = optimize_model(optimizer, memory, policy_net, target_net, batch_size, discount_factor)
-            if loss:
-                losses.append(loss.item())
-
-            # print average loss every 100 steps
-            if step % 100 == 0:
-                avg_loss = np.mean(losses)
-                print("Average loss after step {}: {:.3f}".format(step, avg_loss))
-                losses = []
-
-            # update target network after target_update steps
-            if step % target_update == 0:
-                 target_net.load_state_dict(policy_net.state_dict())
-
+            val_returns.append(rewards.mean().item())
             # store actions for next time step to compute reward
             actions_prev = actions
 
-            step += 1
+        # compare the average reward received on val set for early stopping
+        avg_val_return = np.mean(val_returns)
+        print("Average return on validation set at epoch {}: {:.3f}".format(i_epoch, avg_val_return))
+        if i_epoch == 20:
+            best_val_return = avg_val_return
+        elif i_epoch > 20:
+            if avg_val_return > best_val_return:
+                best_val_return = avg_val_return
+            else:
+                if best_val_return > 0:
+                    early_stop = True
 
-        # save the model every epoch
-        torch.save(target_net.state_dict(), "models/dqn_epoch_{}.pt".format(i_epoch+1))
+        t2 = time.time()
+        t = (t2-t1)/60
+        print("Finished epoch {} in {:.2f} minutes".format(i_epoch, t))
+        i_epoch += 1
+
+    print("Stopped training at epoch {}".format(i_epoch))
+    return best_params
+
+if __name__ == '__main__':
+    # get arguments from command line for asset type and year range
+    parser = argparse.ArgumentParser(description='Select asset type and year range to train.')
+    parser.add_argument('-asset_type', type=str, required=True)
+    parser.add_argument('-min_year', type=int, required=True)
+    parser.add_argument('-max_year', type=int, required=True)
+    args = parser.parse_args()
+    asset_type = args.asset_type
+    min_year = args.min_year
+    max_year = args.max_year
+
+    # set up networks, memory, optimizer
+    policy_net = PolicyNet().to(device)
+    target_net = PolicyNet().to(device)
+    target_net.eval()  # no optimization is performed directly on target network
+    memory = ReplayMemory(5000)
+    optimizer = torch.optim.Adam(policy_net.parameters(), lr=1e-4)
+
+    print("Training DQN on {} assets for years {} to {}...".format(asset_type, min_year, max_year))
+
+    # train and save best params
+    params = train_dqn(policy_net, target_net, memory, optimizer, asset_type)
+    torch.save(params, "models/dqn_{}_{}_{}.pt".format(asset_type, min_year, max_year))
