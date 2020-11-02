@@ -134,8 +134,7 @@ def train_dqn(policy_net, target_net, memory, optimizer, asset_type, min_year=20
             if avg_val_return > best_val_return:
                 best_val_return = avg_val_return
             else:
-                if best_val_return > 0:
-                    early_stop = True
+                early_stop = True
 
         t2 = time.time()
         t = (t2-t1)/60
