@@ -165,5 +165,5 @@ if __name__ == '__main__':
     print("Training DQN on {} assets for years {} to {}...".format(asset_type, min_year, max_year))
 
     # train and save best params
-    params = train_dqn(policy_net, target_net, memory, optimizer, asset_type)
+    params = train_dqn(policy_net, target_net, memory, optimizer, asset_type, min_year, max_year)
     torch.save(params, "models/dqn_{}_{}_{}.pt".format(asset_type, min_year, max_year))
