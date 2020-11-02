@@ -22,7 +22,7 @@ def optimize_model(optimizer, memory, policy_net, target_net, batch_size, \
 
     # get values of currrent actions from policy net
     action_values = policy_net(states)
-    action_idx = actions + 1 # action indexes
+    action_idx = actions.long() + 1 # action indexes
     row_idx = torch.arange(action_values.size(0))
     action_values = action_values[row_idx, action_idx]
 

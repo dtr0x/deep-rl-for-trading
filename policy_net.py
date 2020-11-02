@@ -37,5 +37,5 @@ class PolicyNet(nn.Module):
     def get_actions(self, states):
         with torch.no_grad():
             action_values = self(states) # calls forward implicity
-            actions = action_values.argmax(dim=1).type(torch.long) - 1 # action in {-1, 0, 1}
+            actions = action_values.argmax(dim=1).type(torch.float32) - 1 # action in {-1, 0, 1}
         return actions
