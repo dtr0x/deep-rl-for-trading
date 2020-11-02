@@ -27,7 +27,7 @@ def select_action(policy_net, states, eps):
     else:
         # return random actions
         actions = np.random.choice([-1, 0, 1], len(states))
-        actions = torch.tensor(actions, dtype=torch.long, device=device)
+        actions = torch.tensor(actions, dtype=torch.float32, device=device)
     return actions
 
 # main training function
@@ -47,7 +47,7 @@ def select_action(policy_net, states, eps):
 #   tgt_vol: target volatility (see reward function)
 def train_dqn(policy_net, target_net, memory, optimizer, asset_type, min_year=2006,
     max_year=2010, val_frac=0.1, discount_factor=0.3, target_update=1000,
-    batch_size=64, bp=0.002, tgt_vol=0.1):
+    batch_size=64, bp=0.001, tgt_vol=0.3):
     # durations to train/validate for
     min_year = min_year % 2006 + 1
     max_year = max_year % 2006 + 1
@@ -59,6 +59,10 @@ def train_dqn(policy_net, target_net, memory, optimizer, asset_type, min_year=20
 
     # load data
     S, P, sigall = [x.to(device) for x in load_states(asset_type)]
+
+    n_assets = len(S)
+    # store previous action for asset, initially 0
+    actions_prev = torch.zeros(n_assets, device=device)
 
     # flag for early stopping
     early_stop = False
@@ -75,9 +79,6 @@ def train_dqn(policy_net, target_net, memory, optimizer, asset_type, min_year=20
         else:
             eps = eps_end
 
-        # store previous actions for each asset, initially 0
-        actions_prev = torch.zeros(len(S), device=device)
-
         losses = []
         # training loop
         for t in train_idx:
@@ -86,30 +87,29 @@ def train_dqn(policy_net, target_net, memory, optimizer, asset_type, min_year=20
             prices = P[:, t]
             prices_next = P[:, t+1]
             sigmas = sigall[:, t]
-
-            # Cycle through assets, store transitions and optimize
-            for i in range(len(S)):
-                a = select_action(policy_net, states[i].unsqueeze(0), eps)
-                r = reward(prices[i], prices_next[i], sigmas[i].unsqueeze(0), a,
-                    actions_prev[i], tgt_vol, bp)
-                actions_prev[i] = a
-                memory.push(states[i], a, next_states[i], r)
-                loss = optimize_model(optimizer, memory, policy_net, target_net, batch_size,
-                discount_factor)
+            actions = select_action(policy_net, states, eps) # get actions from DQN
+            # compute rewards
+            rewards = reward(prices, prices_next, sigmas, actions, actions_prev, tgt_vol, bp)
+            # set previous actions to current actions
+            actions_prev = actions
+            # store transition for each asset and optimize
+            for s, a, ns, r in zip(states, actions, next_states, rewards):
+                memory.push(s, a, ns, r)
+                loss = optimize_model(optimizer, memory, policy_net, target_net,
+                    batch_size, discount_factor)
                 if loss:
                     losses.append(loss.item())
-
                 # update target network after target_update steps
                 if step % target_update == 0:
                      target_net.load_state_dict(policy_net.state_dict())
                      avg_loss = np.mean(losses)
                      print("Average loss after step {}: {:.3f}".format(step, avg_loss))
                      losses = []
-
                 step += 1
 
         # validation loop
         val_returns = []
+        actions_prev = torch.zeros(len(S), device=device)
         for t in val_idx:
             # get states/prices/sigma values for each asset
             states = S[:, t]
@@ -123,6 +123,7 @@ def train_dqn(policy_net, target_net, memory, optimizer, asset_type, min_year=20
             val_returns.append(rewards.mean().item())
             # store actions for next time step to compute reward
             actions_prev = actions
+        print("Last actions chosen on validation set:", actions)
 
         # compare the average reward received on val set for early stopping
         avg_val_return = np.mean(val_returns)
