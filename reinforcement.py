@@ -22,7 +22,7 @@ def get_sigma_all(prices, t0):
     return torch.tensor(sigall, dtype=torch.float32)
 
 # Compute reward (Equation (4) in 'Deep Reinforcement Learning for Trading' with mu=1).
-def reward(prices, prices_next, sigma, actions, actions_prev, tgt_vol, bp):
+def get_reward(prices, prices_next, sigma, actions, actions_prev, tgt_vol, bp):
     r = prices_next - prices
     x = actions*tgt_vol/sigma[:,1]
     y = actions_prev*tgt_vol/sigma[:,0]

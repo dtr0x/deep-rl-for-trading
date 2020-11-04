@@ -3,7 +3,7 @@ import numpy as np
 from save_states_all import load_states
 from policy_net import PolicyNet
 from replay_memory import ReplayMemory
-from reinforcement import reward
+from reinforcement import get_reward
 from optimization import optimize_model
 import time, argparse
 
@@ -18,7 +18,7 @@ eps_len = 10 # number of epochs to decay epsilon
 # linear annealing of epsilon
 eps_sched = np.linspace(eps_start, eps_end, eps_len)
 
-# The epsilon-greedy policy is applied applied asset-wise
+# Select action using epsilon-greedy policy
 def select_action(policy_net, states, eps):
     sample = random.random()
     if sample > eps:
@@ -45,9 +45,10 @@ def select_action(policy_net, states, eps):
 #   batch_size: number of transitions to pass to optimizer at each iteration
 #   bp: penalty for trade commission (see reward function)
 #   tgt_vol: target volatility (see reward function)
+#   n_epochs:
 def train_dqn(policy_net, target_net, memory, optimizer, asset_type, min_year=2006,
-    max_year=2010, val_frac=0.1, discount_factor=0.3, target_update=1000,
-    batch_size=64, bp=0.001, tgt_vol=0.3):
+    max_year=2010, val_frac=0.1, discount_factor=0.3, target_update=10000,
+    batch_size=64, bp=0.002, tgt_vol=0.1):
     # durations to train/validate for
     min_year = min_year % 2006 + 1
     max_year = max_year % 2006 + 1
@@ -59,18 +60,15 @@ def train_dqn(policy_net, target_net, memory, optimizer, asset_type, min_year=20
 
     # load data
     S, P, sigall = [x.to(device) for x in load_states(asset_type)]
-
     n_assets = len(S)
-    # store previous action for asset, initially 0
-    actions_prev = torch.zeros(n_assets, device=device)
 
     # flag for early stopping
     early_stop = False
     step = 1 # keep track of all iterations to update target network when step % target_update == 0
     i_epoch = 1
+    losses = []
     while not early_stop:
         t1 = time.time()
-
         # store optimal parameters for early stopping
         best_params = policy_net.state_dict()
         # epsilon greedy action selection
@@ -78,34 +76,33 @@ def train_dqn(policy_net, target_net, memory, optimizer, asset_type, min_year=20
             eps = eps_sched[i_epoch-1]
         else:
             eps = eps_end
-
-        losses = []
         # training loop
-        for t in train_idx:
-            states = S[:, t]
-            next_states = S[:, t+1]
-            prices = P[:, t]
-            prices_next = P[:, t+1]
-            sigmas = sigall[:, t]
-            actions = select_action(policy_net, states, eps) # get actions from DQN
-            # compute rewards
-            rewards = reward(prices, prices_next, sigmas, actions, actions_prev, tgt_vol, bp)
-            # set previous actions to current actions
-            actions_prev = actions
-            # store transition for each asset and optimize
-            for s, a, ns, r in zip(states, actions, next_states, rewards):
-                memory.push(s, a, ns, r)
+        for i in range(n_assets):
+            states = S[i]
+            prices = P[i]
+            sigmas = sigall[i]
+            # store previous action for asset, initially 0
+            action_prev = torch.zeros(1, device=device)
+            for t in train_idx:
+                action = select_action(policy_net, states[t].unsqueeze(0), eps) # get actions from DQN
+                # compute rewards
+                reward = get_reward(prices[t], prices[t+1], sigmas[t].unsqueeze(0),
+                    action, action_prev, tgt_vol, bp)
+                # store transition for each asset and optimize
+                memory.push(states[t], action, states[t+1], reward)
                 loss = optimize_model(optimizer, memory, policy_net, target_net,
                     batch_size, discount_factor)
                 if loss:
                     losses.append(loss.item())
-                # update target network after target_update steps
+                    # update target network after target_update steps
                 if step % target_update == 0:
-                     target_net.load_state_dict(policy_net.state_dict())
-                     avg_loss = np.mean(losses)
-                     print("Average loss after step {}: {:.3f}".format(step, avg_loss))
-                     losses = []
+                    target_net.load_state_dict(policy_net.state_dict())
+                    avg_loss = np.mean(losses)
+                    print("Average loss after step {}: {:.3f}".format(step, avg_loss))
+                    losses = []
                 step += 1
+                # set previous actions to current actions
+                action_prev = action
 
         # validation loop
         val_returns = []
@@ -119,7 +116,7 @@ def train_dqn(policy_net, target_net, memory, optimizer, asset_type, min_year=20
             sigmas = sigall[:, t]
             actions = policy_net.get_actions(states) # get actions from DQN
             # compute rewards
-            rewards = reward(prices, prices_next, sigmas, actions, actions_prev, tgt_vol, bp)
+            rewards = get_reward(prices, prices_next, sigmas, actions, actions_prev, tgt_vol, bp)
             val_returns.append(rewards.mean().item())
             # store actions for next time step to compute reward
             actions_prev = actions
@@ -128,20 +125,22 @@ def train_dqn(policy_net, target_net, memory, optimizer, asset_type, min_year=20
         # compare the average reward received on val set for early stopping
         avg_val_return = np.mean(val_returns)
         print("Average return on validation set at epoch {}: {:.3f}".format(i_epoch, avg_val_return))
-        if i_epoch == 20:
+        if i_epoch == 15:
             best_val_return = avg_val_return
-        elif i_epoch > 20:
+        elif i_epoch > 15:
             if avg_val_return > best_val_return:
                 best_val_return = avg_val_return
             else:
-                early_stop = True
+                if best_val_return > 0:
+                    early_stop = True
 
         t2 = time.time()
         t = (t2-t1)/60
         print("Finished epoch {} in {:.2f} minutes".format(i_epoch, t))
         i_epoch += 1
 
-    print("Stopped training at epoch {}".format(i_epoch))
+    print("Stopped training after epoch {}".format(i_epoch-1))
+    # return best_params
     return best_params
 
 if __name__ == '__main__':

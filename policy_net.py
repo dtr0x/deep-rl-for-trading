@@ -18,9 +18,8 @@ class PolicyNet(nn.Module):
             batch_first=True
             )
 
-        # discrete action space
+        self.relu = nn.ReLU()
         self.linear = nn.Linear(self.hidden_dim, 3)
-        self.softmax = nn.Softmax(dim=1)
 
     # assumed input size: batch_size * seq_len * input_dim
     def forward(self, input):
@@ -28,9 +27,9 @@ class PolicyNet(nn.Module):
 
         ff_input = h[0][1] # get second layer hidden output
 
-        output = self.linear(ff_input)
+        output = self.relu(ff_input)
 
-        output = self.softmax(output)
+        output = self.linear(ff_input)
 
         return output
 

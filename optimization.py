@@ -1,5 +1,5 @@
 import torch
-from torch.nn.functional import smooth_l1_loss as huber
+from torch.nn.functional import smooth_l1_loss as huber, mse_loss
 
 ''' optimization for DQN training '''
 
@@ -11,9 +11,9 @@ def optimize_model(optimizer, memory, policy_net, target_net, batch_size, \
     transitions = memory.sample(batch_size)
 
     states = torch.stack([t.state for t in transitions])
-    actions = torch.stack([t.action for t in transitions])
-    rewards = torch.stack([t.reward for t in transitions])
+    actions = torch.cat([t.action for t in transitions])
     next_states = torch.stack([t.next_state for t in transitions])
+    rewards = torch.cat([t.reward for t in transitions])
 
     # get expected values from target net
     next_state_values, _ = target_net(next_states).max(dim=1)
