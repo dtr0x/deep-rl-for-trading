@@ -6,13 +6,13 @@ import pandas as pd
 # normalized prices over one year up to time t, return last value
 def norm_price(prices, t):
     x = prices[(t-251):(t+1)] # one year of data
-    mu    = np.mean(x)
+    mu = np.mean(x)
     sigma = np.std(x)
     return ((x-mu)/sigma)[-1]
 
 # normalized returns over one year from price series up to time t
 def norm_returns(prices, t):
-    periods = [30,60,90,252]
+    periods = [21,42,63,252]
     rets = [(prices[t]-prices[t-p])/prices[t-p] for p in periods]
     returns1Year = (prices[(t-251):(t+1)]-prices[(t-252):t])/prices[(t-252):t]
     s = pd.Series(returns1Year)
