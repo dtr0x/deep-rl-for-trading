@@ -2,12 +2,12 @@ from state_space import get_states_iter
 import numpy as np
 import pandas as pd
 import multiprocessing as mp
-import torch, time, re
+import torch, time
 
 '''Compute all states for all assets in parallel and save data.'''
 
 # Helper function to load all states, corresponding prices and ex ante sigma values
-# accepted asset_type: 'all', 'commodity', 'currency', 'index'
+# accepted asset_type: 'all', 'commodity', 'fixed_income', 'currency', 'index'
 def load_states(asset_type='all'):
     state_data = np.load('state_data.npz')
 
@@ -19,22 +19,22 @@ def load_states(asset_type='all'):
         return S, P, sigall
     else:
         if asset_type == 'commodity':
-            r = r'Comdty$'
+            ac = 'Commodities'
+        elif asset_type == 'fixed_income':
+            ac = 'Fixed Income'
         elif asset_type == 'currency':
-            r = r'Curncy$'
+            ac = 'Currencies'
         elif asset_type == 'index':
-            r = r'Index$'
+            ac = 'Equities'
         else:
             return None
 
-        cols = pd.read_csv('cleaned_data.csv').columns[1:]
-        # get indices for assets of specified type
-        asset_idx = np.where([re.search(r, c) for c in cols])[0]
+        asset_classes = pd.read_csv('asset_classes.csv')
+        asset_idx = asset_classes[asset_classes['asset_class']==ac].index
 
         S = S[asset_idx] # n_assets * n_days * 60 * 7
         P = P[asset_idx] # n_assets * n_days
-        # ex ante sigma values for each day to compute rewards
-        sigall = sigall[asset_idx] # n_assets * n_days * 2
+        sigall = sigall[asset_idx] # n_assets * n_days
 
         return S, P, sigall
 
