@@ -39,7 +39,7 @@ def select_action(policy_net, state, eps):
 #   tgt_vol: target volatility (see reward function)
 #   n_epochs:
 def train_dqn(policy_net, target_net, memory, optimizer, asset_type, min_year=2006,
-    max_year=2010, val_frac=0.1, discount_factor=0.3, target_update=1000, n_epochs=30,
+    max_year=2010, val_frac=0.1, discount_factor=0.3, target_update=1000, n_epochs=20,
     batch_size=64, bp=0.002, tgt_vol=0.1):
     # durations to train/validate for
     min_year_idx = min_year % 2006 + 1
