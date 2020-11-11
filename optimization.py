@@ -1,5 +1,5 @@
 import torch
-from torch.nn.functional import smooth_l1_loss as huber, mse_loss
+from torch.nn.functional import smooth_l1_loss as huber
 
 ''' optimization for DQN training '''
 
@@ -30,11 +30,6 @@ def optimize_model(optimizer, memory, policy_net, target_net, batch_size, \
 
     optimizer.zero_grad() # set gradients to 0 to avoid accumulation
     loss.backward() # backpropograte to compute gradient wrt parameters
-
-    # clip to avoid exploding gradient
-    for param in policy_net.parameters():
-        if param.grad is not None:
-            param.grad.data.clamp(-1, 1)
 
     optimizer.step() # perform gradient descent step
 
