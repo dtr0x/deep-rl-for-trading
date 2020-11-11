@@ -10,14 +10,6 @@ import time, argparse
 # set device for optimization
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# epsilon greedy policy
-eps_start = 0.9
-eps_end = 0.1
-eps_len = 10 # number of epochs to decay epsilon
-
-# linear annealing of epsilon
-eps_sched = np.linspace(eps_start, eps_end, eps_len)
-
 # Select action using epsilon-greedy policy
 def select_action(policy_net, state, eps):
     sample = np.random.rand()
@@ -47,7 +39,7 @@ def select_action(policy_net, state, eps):
 #   tgt_vol: target volatility (see reward function)
 #   n_epochs:
 def train_dqn(policy_net, target_net, memory, optimizer, asset_type, min_year=2006,
-    max_year=2010, val_frac=0.1, discount_factor=0.3, target_update=1000, n_epochs=20,
+    max_year=2010, val_frac=0.1, discount_factor=0.3, target_update=1000, n_epochs=30,
     batch_size=64, bp=0.002, tgt_vol=0.1):
     # durations to train/validate for
     min_year = min_year % 2006 + 1
@@ -58,6 +50,9 @@ def train_dqn(policy_net, target_net, memory, optimizer, asset_type, min_year=20
     train_idx = range(min_idx, val_idx_min)
     val_idx = range(val_idx_min, max_idx)
 
+    # for epsilon greedy action selection
+    eps = 0.1
+
     # load data
     S, P, sigall = [x.to(device) for x in load_states(asset_type)]
     n_assets = len(S)
@@ -67,12 +62,6 @@ def train_dqn(policy_net, target_net, memory, optimizer, asset_type, min_year=20
     for i_epoch in range(n_epochs):
         epoch_rewards = []
         t1 = time.time()
-        # epsilon greedy action selection
-        # if i_epoch < eps_len:
-        #     eps = eps_sched[i_epoch]
-        # else:
-        #     eps = eps_end
-        eps = 0.1
         # store previous action for asset, initially 0
         actions_prev = torch.zeros(n_assets, device=device)
         # training loop
