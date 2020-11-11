@@ -42,13 +42,16 @@ def train_dqn(policy_net, target_net, memory, optimizer, asset_type, min_year=20
     max_year=2010, val_frac=0.1, discount_factor=0.3, target_update=1000, n_epochs=30,
     batch_size=64, bp=0.002, tgt_vol=0.1):
     # durations to train/validate for
-    min_year = min_year % 2006 + 1
-    max_year = max_year % 2006 + 1
-    min_idx = 252*(min_year-1)
-    max_idx = 252*max_year - 1
+    min_year_idx = min_year % 2006 + 1
+    max_year_idx = max_year % 2006 + 1
+    min_idx = 252*(min_year_idx-1)
+    max_idx = 252*max_year_idx - 1
     val_idx_min = int((1-val_frac) * (max_idx-min_idx)) + min_idx
     train_idx = range(min_idx, val_idx_min)
     val_idx = range(val_idx_min, max_idx)
+
+    # set target to evaluation mode (no dropout etc)
+    target_net.eval()
 
     # for epsilon greedy action selection
     eps = 0.1
@@ -60,6 +63,7 @@ def train_dqn(policy_net, target_net, memory, optimizer, asset_type, min_year=20
     step = 0 # keep track of all iterations to update target network when step % target_update == 0
     losses = []
     for i_epoch in range(n_epochs):
+        policy_net.train() # call eval before validating, reset to train mode at every epoch
         epoch_rewards = []
         t1 = time.time()
         # store previous action for asset, initially 0
@@ -97,6 +101,7 @@ def train_dqn(policy_net, target_net, memory, optimizer, asset_type, min_year=20
         # validation loop
         val_returns = []
         actions_prev = torch.zeros(len(S), device=device)
+        policy_net.eval() # eval mode for validation
         for t in val_idx:
             # get states/prices/sigma values for each asset
             states = S[:, t]
@@ -119,10 +124,10 @@ def train_dqn(policy_net, target_net, memory, optimizer, asset_type, min_year=20
         print("Average return on validation set at epoch {}: {:.3f}".format(i_epoch, avg_val_return))
         if i_epoch == 0:
             best_return = avg_val_return
+            torch.save(policy_net.state_dict(), "models/dqn_{}_{}_{}.pt".format(asset_type, min_year, max_year))
         elif avg_val_return > best_return:
             best_return = avg_val_return
-            torch.save(policy_net.state_dict(), "models/dqn_{}_{}_{}_best.pt".format(asset_type, min_year, max_year))
-        torch.save(policy_net.state_dict(), "models/dqn_{}_{}_{}_{}.pt".format(asset_type, min_year, max_year, i_epoch))
+            torch.save(policy_net.state_dict(), "models/dqn_{}_{}_{}.pt".format(asset_type, min_year, max_year))
 
         t2 = time.time()
         t = (t2-t1)/60
@@ -144,7 +149,6 @@ if __name__ == '__main__':
     # set up networks, memory, optimizer
     policy_net = PolicyNet().to(device)
     target_net = PolicyNet().to(device)
-    target_net.eval()  # no optimization is performed directly on target network
     memory = ReplayMemory(5000)
     optimizer = torch.optim.Adam(policy_net.parameters(), lr=1e-4)
 
