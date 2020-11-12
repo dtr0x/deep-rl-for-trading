@@ -49,7 +49,7 @@ def rsi(prices, t):
     down_chg_avg = np.array(pd.Series(down_chg).ewm(alpha=alpha).mean())[-60:]
     # compute RSI
     rs = up_chg_avg/down_chg_avg
-    rsi = 100 - 100/(1+rs)
+    rsi = (100 - 100/(1+rs))/100
     return rsi
 
 # Get state for time t, dim=60x7
