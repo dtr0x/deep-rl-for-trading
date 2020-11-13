@@ -29,9 +29,9 @@ if __name__ == '__main__':
     dqn = PolicyNet().to(device).eval()
 
     # load PG params and set model to eval mode
-    params1_pg = torch.load("models/pg_{}_{}_{}.pt".format(asset_type, 2006, 2010))
-    params2_pg = torch.load("models/pg_{}_{}_{}.pt".format(asset_type, 2011, 2015))
-    pg = PolicyNet().to(device).eval()
+    # params1_pg = torch.load("models/pg_{}_{}_{}.pt".format(asset_type, 2006, 2010))
+    # params2_pg = torch.load("models/pg_{}_{}_{}.pt".format(asset_type, 2011, 2015))
+    # pg = PolicyNet().to(device).eval()
 
     min_year_idx = min_year % 2006 + 1
     max_year_idx = max_year % 2006 + 1
@@ -67,16 +67,16 @@ if __name__ == '__main__':
     # set initial model params
     if min_idx < switch_idx:
         dqn.load_state_dict(params1_dqn)
-        pg.load_state_dict(params1_pg)
+        # pg.load_state_dict(params1_pg)
     else:
         dqn.load_state_dict(params2_dqn)
-        pg.load_state_dict(params2_pg)
+        # pg.load_state_dict(params2_pg)
 
     for t in test_idx:
         # change the model if we reach switch_idx
         if t == switch_idx:
             dqn.load_state_dict(params2_dqn)
-            pg.load_state_dict(params2_pg)
+            # pg.load_state_dict(params2_pg)
 
         states = S[:, t]
         prices = P[:, t]
@@ -89,10 +89,10 @@ if __name__ == '__main__':
         dqn_returns.append(dqn_rewards.mean().item())
         dqn_actions_prev = dqn_actions
 
-        pg_actions = pg.get_actions(states)
-        pg_rewards = get_reward(prices, prices_next, sigmas, sigmas_prev, pg_actions, pg_actions_prev, tgt_vol, bp)
-        pg_returns.append(pg_rewards.mean().item())
-        pg_actions_prev = pg_actions
+        # pg_actions = pg.get_actions(states)
+        # pg_rewards = get_reward(prices, prices_next, sigmas, sigmas_prev, pg_actions, pg_actions_prev, tgt_vol, bp)
+        # pg_returns.append(pg_rewards.mean().item())
+        # pg_actions_prev = pg_actions
 
         lo_rewards = get_reward(prices, prices_next, sigmas, sigmas_prev, lo_actions, lo_actions, tgt_vol, bp)
         lo_returns.append(lo_rewards.mean().item())
@@ -107,11 +107,12 @@ if __name__ == '__main__':
         sgn_actions_prev = sgn_actions
 
     plt.plot(np.cumsum(dqn_returns), color='red')
-    plt.plot(np.cumsum(pg_returns), color='purple')
+    # plt.plot(np.cumsum(pg_returns), color='purple')
     plt.plot(np.cumsum(lo_returns), color='blue')
     plt.plot(np.cumsum(macd_returns), color='green')
     plt.plot(np.cumsum(sgn_returns), color='orange')
-    plt.legend(['DQN', 'PG', 'Long-Only', 'MACD', 'Sign(R)'])
+    # plt.legend(['DQN', 'PG', 'Long-Only', 'MACD', 'Sign(R)'])
+    plt.legend(['DQN', 'Long-Only', 'MACD', 'Sign(R)'])
 
     if asset_type == 'all':
         asset_title = 'all assets'
